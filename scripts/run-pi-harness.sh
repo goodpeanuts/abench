@@ -12,8 +12,8 @@
 # 用法：
 #   bash scripts/run-pi-harness.sh --provider dashscope --model qwen3.8-max
 #   常用选项：--thinking max|--task <dir>|--timeout 840|--bootstrap-only|
-#             --skip-smoke|--keep|--no-verify
-#   诊断扫描可显式加 --allow-any-thinking；正常评测不得使用该逃生口。
+#             --skip-smoke|--keep
+#   非最高思考档可显式加 --allow-any-thinking；该标记只放宽档位校验，仍会评分。
 # 环境变量：PI_HARNESS_PROVIDER/MODEL/THINKING/TIMEOUT_SEC/SMOKE_TIMEOUT_SEC/
 # TASK/PROJECT、PI_BIN。源配置只保存密钥变量名，harness 不主动序列化密钥值。
 set -euo pipefail
@@ -33,7 +33,6 @@ pi_bin="${PI_BIN:-}"
 bootstrap_only=0
 skip_smoke=0
 keep=0
-no_verify=0
 allow_any_thinking=0
 pi_ext="$repo_root/scripts/pi-emsctl-tool.mjs"
 runtime_pi_dir=""
@@ -54,7 +53,6 @@ while [[ $# -gt 0 ]]; do
     --bootstrap-only) bootstrap_only=1; shift ;;
     --skip-smoke) skip_smoke=1; shift ;;
     --keep) keep=1; shift ;;
-    --no-verify) no_verify=1; shift ;;
     --allow-any-thinking) allow_any_thinking=1; shift ;;
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "未知参数：$1" >&2; exit 2 ;;
@@ -67,7 +65,7 @@ done
 }
 
 # 仓库约束（AGENTS.md「测试运行约定」）：所有评测运行必须使用模型相应的
-# 最高思考档；正常评测降档一律拒绝。--allow-any-thinking 只供显式诊断扫描。
+# 最高思考档；默认拒绝降档。--allow-any-thinking 只放宽思考档校验，运行仍会评分。
 resolve_max_thinking() {
   case "$1/$2" in
     wodex/claude-opus-5|moonshot/kimi-k3|dashscope/qwen3.8-max|deepseek/deepseek-v4-pro)
@@ -94,7 +92,6 @@ esac
 if [[ "$allow_any_thinking" -eq 1 ]]; then
   diagnostic=1
   run_kind="diagnostic"
-  no_verify=1
 fi
 
 [[ "$timeout_sec" =~ ^[1-9][0-9]*$ ]] || { echo "--timeout 必须是正整数秒" >&2; exit 2; }
@@ -106,7 +103,7 @@ fi
 task_dir="$repo_root/$task_rel"
 log() { printf '[pi-harness] %s\n' "$*"; }
 if [[ "$diagnostic" -eq 1 ]]; then
-  log "诊断模式：thinking=${thinking}，强制跳过 verifier，结果不得计作正式评测"
+  log "诊断模式：thinking=${thinking}，仍运行 verifier 并生成分数"
 fi
 
 cleanup() {
@@ -464,20 +461,17 @@ fi
 # mkdir 会失败。harbor_verify.sh 恒以 0 退出，分数在 reward.json。
 
 reward_summary='null'
-if [[ "$no_verify" = "1" ]]; then
-  log "--no-verify：跳过评分"
-else
-  log "运行 verifier（harbor_verify.sh）"
-  HARBOR_STATE_DIR="$state_dir" \
-  HARBOR_SCENARIO="$task_dir/scenario.json" \
-  HARBOR_REWARD_PATH="$verifier_dir/reward.json" \
-  HARBOR_DETAILS_PATH="$verifier_dir/details.json" \
-  HARBOR_REPLAY_PATH="$verifier_dir/replay.json" \
-  PYTHON_BIN="${PYTHON_BIN:-python3}" \
-    bash "$task_dir/tests/harbor_verify.sh" >> "$run_dir/harness.log" 2>&1 || \
-    log "verifier 非零退出（详见 harness.log），继续写 manifest"
-  if [[ -f "$verifier_dir/reward.json" ]]; then
-    reward_summary="$(python3 - "$verifier_dir/reward.json" "$verifier_dir/details.json" <<'PY'
+log "运行 verifier（harbor_verify.sh）"
+HARBOR_STATE_DIR="$state_dir" \
+HARBOR_SCENARIO="$task_dir/scenario.json" \
+HARBOR_REWARD_PATH="$verifier_dir/reward.json" \
+HARBOR_DETAILS_PATH="$verifier_dir/details.json" \
+HARBOR_REPLAY_PATH="$verifier_dir/replay.json" \
+PYTHON_BIN="${PYTHON_BIN:-python3}" \
+  bash "$task_dir/tests/harbor_verify.sh" >> "$run_dir/harness.log" 2>&1 || \
+  log "verifier 非零退出（详见 harness.log），继续写 manifest"
+if [[ -f "$verifier_dir/reward.json" ]]; then
+  reward_summary="$(python3 - "$verifier_dir/reward.json" "$verifier_dir/details.json" <<'PY'
 import json, sys
 try:
     reward = json.load(open(sys.argv[1]))
@@ -494,7 +488,7 @@ print(json.dumps({
 }))
 PY
 )"
-    python3 - "$verifier_dir/reward.json" "$verifier_dir/details.json" <<'PY' || true
+  python3 - "$verifier_dir/reward.json" "$verifier_dir/details.json" <<'PY' || true
 import json, sys
 reward = json.load(open(sys.argv[1]))
 details = json.load(open(sys.argv[2]))
@@ -503,9 +497,8 @@ print("[pi-harness] overall={overall} strict_pass={strict} integrity={integrity}
           overall=reward.get("overall"), strict=reward.get("strict_pass"),
           integrity=reward.get("integrity"), count=details.get("action_count")))
 PY
-  else
-    log "警告：verifier 未产出 reward.json"
-  fi
+else
+  log "警告：verifier 未产出 reward.json"
 fi
 
 # ---------- 10. run-manifest ----------
