@@ -224,7 +224,8 @@ TEMPLATE = r"""<!doctype html>
     <p class="legend">覆盖/完成 = 权重比（分母为可派事故总权重 8.25）；finish@ = finish 时的模拟时间 / 7200；
     resp/cov/…/integ 为六维原值；Δ = 动态 − 官方。hard_failure 的跑在任何权重下动态值恒为 0。
     行底色区分模型（紫=kimi、青=qwen、橙=claude、绿=gpt、粉=deepseek、灰=其他）；思考档标签：灰=low、蓝=medium、紫=high、橙=xhigh、红=max。
-    汇总表按当前权重下的动态均值实时降序排名，调整权重即重排；可用下拉按思考档或数据版本筛选（同时作用于汇总与明细）。</p>
+    汇总表按当前权重下的动态均值实时降序排名，调整权重即重排；可用下拉按思考档筛选（同时作用于汇总与明细）。
+    排行只在同一数据版本内比较：版本下拉不提供「全部版本」，默认选中最新版本。</p>
   </div>
 </div>
 
@@ -309,11 +310,20 @@ function modelClass(m) {
 function thinkPill(t) {
   return `<span class="pill think-${t}">${t}</span>`;
 }
-let thinkFilter = "all", versionFilter = "all";
+let thinkFilter = "all", versionFilter = "";
 function rowVisible(row) {
   if (thinkFilter !== "all" && row.thinking !== thinkFilter) return false;
-  if (versionFilter !== "all" && (row.data_version || "?") !== versionFilter) return false;
+  if ((row.data_version || "?") !== versionFilter) return false;
   return true;
+}
+function versionCompare(a, b) {
+  const pa = String(a).split(".").map(x => parseInt(x) || 0);
+  const pb = String(b).split(".").map(x => parseInt(x) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d;
+  }
+  return 0;
 }
 function initFilters() {
   const order = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -322,9 +332,12 @@ function initFilters() {
   const tSel = document.getElementById("thinkFilter");
   tSel.innerHTML = `<option value="all">全部档位</option>` + thinks.map(t => `<option value="${t}">${t}</option>`).join("");
   tSel.addEventListener("change", () => { thinkFilter = tSel.value; render(); });
-  const versions = [...new Set(DATA.map(r => r.data_version || "?"))].sort();
+  // 排行只在同一数据版本内比较：不提供「全部版本」，默认选中最新版本
+  const versions = [...new Set(DATA.map(r => r.data_version || "?"))].sort(versionCompare);
   const vSel = document.getElementById("versionFilter");
-  vSel.innerHTML = `<option value="all">全部版本</option>` + versions.map(v => `<option value="${v}">${v}</option>`).join("");
+  vSel.innerHTML = versions.map(v => `<option value="${v}">${v}</option>`).join("");
+  versionFilter = versions[versions.length - 1];
+  vSel.value = versionFilter;
   vSel.addEventListener("change", () => { versionFilter = vSel.value; render(); });
 }
 function renderSummary() {
