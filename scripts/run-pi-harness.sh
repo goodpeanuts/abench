@@ -2,9 +2,12 @@
 # run-pi-harness.sh — 宿主机 pi harness + 容器桥接（abench）
 #
 # 架构：pi 在宿主机运行（有 LLM API 网络、有 ~/.pi/agent/models.json provider
-# 目录），其 bash 工具只经逐字桥接命令 `podman compose … exec -T main emsctl …`
-# 驱动任务容器；容器保持隔离。被评分的动作日志来自 simulator sidecar
-# （/tmp/ems-state/actions.jsonl，评分权威），评分在宿主机跑 tests/harbor_verify.sh。
+# 目录），但模型**没有任何文件/shell/网络工具**：经 scripts/pi-emsctl-tool.mjs
+# 注册的唯一工具 emsctl，把每次调用以固定 argv（不经 shell）桥接到
+# `podman compose … exec -T main emsctl <子命令>`。容器保持隔离；宿主机上的
+# 隐藏 scenario / 评测代码对模型不可达（硬封锁，非提示约束）。
+# 被评分的动作日志来自 simulator sidecar（/tmp/ems-state/actions.jsonl，评分
+# 权威），评分在宿主机跑 tests/harbor_verify.sh。
 #
 # 用法：
 #   bash scripts/run-pi-harness.sh --provider dashscope --model qwen3.8-max
@@ -28,7 +31,7 @@ bootstrap_only=0
 skip_smoke=0
 keep=0
 no_verify=0
-tools_list="bash,read,grep,find,ls,write,edit"
+pi_ext="$repo_root/scripts/pi-emsctl-tool.mjs"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -76,6 +79,7 @@ pi_version="$("$pi_bin" --version 2>/dev/null || echo unknown)"
 compose_main="$task_dir/environment/docker-compose.yaml"
 compose_local="$task_dir/environment/docker-compose.local.yaml"
 [[ -f "$compose_main" && -f "$compose_local" ]] || { log "缺少 compose 文件"; exit 2; }
+[[ -f "$pi_ext" ]] || { log "缺少扩展文件：${pi_ext}"; exit 2; }
 
 if [[ "$skip_smoke" -ne 1 ]]; then
   log "静态冒烟：bash scripts/pi-smoke.sh --no-call"
@@ -155,7 +159,8 @@ fi
 
 # ---------- 4. 桥接冒烟 ----------
 
-bridge="podman ${COMPOSE[*]} exec -T main emsctl"
+# 扩展经此环境变量拿到 compose 桥接参数（逗号分隔；本仓库路径不含逗号）
+export PI_EMSCTL_BRIDGE_ARGS="-f,${compose_main},-f,${compose_local},-p,${project}"
 observe_out="$(podman "${COMPOSE[@]}" exec -T main emsctl observe)" || {
   log "桥接 observe 失败（退出码 $?）"; exit 1
 }
@@ -175,6 +180,22 @@ if [[ "$bootstrap_only" = "1" ]]; then
   exit 0
 fi
 
+# ---------- 4.5 agent 烟测（扩展加载 + 单工具注册） ----------
+
+if [[ "$skip_smoke" -ne 1 ]]; then
+  log "agent 烟测：一次最小调用验证扩展与唯一工具 emsctl 可用"
+  agent_smoke_out="$(
+    cd "$workspace" && PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 \
+    "$pi_bin" -p "只回复：OK" --approve --no-session --mode json \
+      --provider "$provider" --model "$model" --thinking off \
+      --tools emsctl --extension "$pi_ext" \
+      --no-extensions --no-skills --no-prompt-templates --no-themes
+  )" || { log "agent 烟测失败：扩展加载或工具注册异常"; exit 1; }
+  grep -q '"type":"agent_end"' <<<"$agent_smoke_out" || {
+    log "agent 烟测未产生 agent_end"; exit 1
+  }
+fi
+
 # ---------- 5. 组装 prompt ----------
 
 prompt_file="$run_dir/prompt.md"
@@ -182,32 +203,28 @@ prompt_file="$run_dir/prompt.md"
   cat "$task_dir/instruction.md"
   cat <<PROMPT
 
-## 运行方式与桥接（重要）
+## 工具与交互方式（重要）
 
-你在宿主机上运行，任务环境在容器里。emsctl 是唯一的环境表面，且只能通过
-下面这条逐字桥接命令调用（把 <子命令及参数> 换成实际参数）：
+你只有一个工具：emsctl。它就是任务环境唯一的环境表面——每次调用在隔离容
+器内恰好执行一个 emsctl 子命令，并把输出的 JSON 对象原样返回。参数以字符
+串数组给出：
 
-    ${bridge} <子命令及参数>
-
-例如第一条观察：
-
-    ${bridge} observe
+- 观察当前状态：args = ["observe"]
+- 派遣单位：args = ["dispatch","--incident","I002","--unit","AM207","--state-version","2","--action-id","d-101"]
+- 推进到下一个事件：args = ["advance","--next-event"]
+- 收尾：args = ["finish","--reason","all feasible work complete"]
 
 规则：
 
-- 每次调用在 stdout 恰好输出一个 JSON 对象；退出码 2 表示结构化拒绝
-  （状态版本过期 / action_id 重复 / 未知对象 / 单位忙 / 能力不匹配）——
-  读取返回的 JSON，改用最新的 state_version 与全新的唯一 action_id 重试；
-  完全相同的 action_id 重试是幂等的。
+- 工具报错表示结构化拒绝（状态版本过期 / action_id 重复 / 未知对象 /
+  单位忙 / 能力不匹配）——读取错误中的 JSON 说明，改用最新的
+  state_version 与全新的唯一 action_id 重试；完全相同的 action_id 重试是
+  幂等的。
 - 先 observe，再按上面的任务契约行动，持续 advance 到 horizon，或在无可
   行动作时 finish。
-- 你的总时间预算约 ${timeout_sec} 秒；接近预算时执行下面这条命令收尾
-  （reason 自拟）：
-
-    ${bridge} finish --reason "budget almost exhausted"
-- 仓库中 tasks/ 目录（尤其 scenario.json、tests/、environment/、solution/）
-  是评测方私有：不要读取、列出或修改。临时文件只写在当前工作目录内。
-  除 LLM API（由 harness 提供）外不要使用网络。
+- 你没有文件读写、shell 或网络工具；请直接在对话中推理并记住状态。
+- 你的总时间预算约 ${timeout_sec} 秒；接近预算时用 finish 收尾（reason
+  自拟）。
 PROMPT
 } > "$prompt_file"
 cp "$prompt_file" "$workspace/BRIDGE.md"
@@ -216,7 +233,7 @@ cp "$prompt_file" "$workspace/BRIDGE.md"
 
 events_file="$run_dir/pi-events.jsonl"
 stderr_file="$run_dir/pi-stderr.log"
-log "启动 pi：provider=${provider} model=${model} thinking=${thinking} timeout=${timeout_sec}s"
+log "启动 pi（单工具硬封锁）：provider=${provider} model=${model} thinking=${thinking} timeout=${timeout_sec}s"
 
 (
   cd "$workspace"
@@ -225,7 +242,7 @@ log "启动 pi：provider=${provider} model=${model} thinking=${thinking} timeou
     --approve --no-session --mode json \
     --provider "$provider" --model "$model" \
     --thinking "$thinking" \
-    --tools "$tools_list" \
+    --tools emsctl --extension "$pi_ext" \
     --no-extensions --no-skills --no-prompt-templates --no-themes
 ) > "$events_file" 2> "$stderr_file" &
 pi_pid=$!
@@ -358,7 +375,7 @@ fi
 # ---------- 10. run-manifest ----------
 
 finished_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-python3 - "$run_dir" "$task_rel" "$provider" "$model" "$thinking" "$tools_list" \
+python3 - "$run_dir" "$task_rel" "$provider" "$model" "$thinking" "emsctl" \
   "$pi_version" "$project" "$started_at" "$finished_at" "$timeout_sec" \
   "$timed_out" "$pi_rc" "$verdict" "$reward_summary" <<'PY'
 import json, pathlib, sys
@@ -377,7 +394,7 @@ if reward_summary != "null":
         pass
 state_files = sorted(p.name for p in (root / "state").glob("*")) if (root / "state").is_dir() else []
 manifest = {
-    "harness": "pi-host-bridge/v1",
+    "harness": "pi-host-bridge/v2",
     "task": task,
     "provider": provider,
     "model": model,

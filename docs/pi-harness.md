@@ -13,8 +13,10 @@ setup 与冒烟脚本与 3bench 仓库保持同源。
 契约，没有 node。而 LLM harness 必须访问模型 API。两者的交界处本来就有正确的
 信任边界——隐藏 scenario 只挂载在 `simulator` sidecar 里，agent 经只读的
 unix socket（`/tmp/ems/emsctl.sock`）交互——因此本 harness 把 pi 放在**宿主
-机**上运行（LLM 调用走宿主机网络），其 bash 工具通过一条逐字桥接命令驱动
-容器内的 `emsctl`：
+机**上运行（LLM 调用走宿主机网络），并通过**工具级硬封锁**收敛模型的能力：
+`scripts/pi-emsctl-tool.mjs` 注册唯一工具 `emsctl`，启动时 `--tools emsctl`
+禁用全部内置工具（无 bash、无 read/write/edit/grep/find/ls）。模型唯一能做
+的事就是调用该工具；工具内部以固定 argv（不经过 shell）执行：
 
 ```
 podman compose -f <task>/environment/docker-compose.yaml \
@@ -22,8 +24,8 @@ podman compose -f <task>/environment/docker-compose.yaml \
                -p sffd-pi exec -T main emsctl <子命令>
 ```
 
-容器侧的 no-network 性质因此完好：agent 拿不到 `main` 的 shell，也接触不到
-simulator 的文件系统。
+子命令白名单：observe / dispatch / reassign / reposition / advance /
+finish；`--scenario/--state-dir/--json/--fresh` 四个直连模式全局旗子被拒绝。
 
 ## 2. 用法
 
@@ -52,12 +54,14 @@ bash scripts/run-pi-harness.sh --provider dashscope --model qwen3.8-max --bootst
 2. **清场拉起**：`down -v`（`simulator-state` 卷残留会让 simulator 以
    `load_existing=True` 恢复旧回合，必须清掉）→ `up -d --wait`（等
    simulator healthcheck 的 socket）→ 一次桥接 `emsctl observe` 冒烟。
-3. **组装 prompt**：`instruction.md` 全文 + 桥接段（逐字命令、JSON 语义、
-   时间预算、禁区），同一内容写入 workspace 的 `BRIDGE.md`。
-4. **跑 pi**：cwd 为每次运行独立的 `results/pi-runs/<时间戳>-<模型>/workspace`
+3. **agent 烟测**：一次最小 LLM 调用验证扩展可加载、唯一工具已注册。
+4. **组装 prompt**：`instruction.md` 全文 + 工具说明段（args 数组用法、
+   JSON 语义、时间预算），同一内容写入 workspace 的 `BRIDGE.md`。
+5. **跑 pi**：cwd 为每次运行独立的 `results/pi-runs/<时间戳>-<模型>/workspace`
    （`AGENTS.md` 随之拷入并被 pi 自动加载）；`pi -p --approve --no-session
-   --mode json --provider … --model … --thinking … --tools bash,read,grep,find,
-   ls,write,edit`；手动 watchdog 在预算超时后 TERM→KILL。
+   --mode json --provider … --model … --thinking … --tools emsctl
+   --extension scripts/pi-emsctl-tool.mjs --no-extensions`；手动 watchdog 在
+   预算超时后 TERM→KILL。
 5. **判定**：解析事件流——pi 的 CLI 在最后一轮 API 错误时也以 0 退出，因此
    按 `agent_end` 与最后一条 assistant 消息的 `stopReason` 判定
    （`ok` / `error_stop` / `no_agent_end`）。判定失败**不阻断评分**。
@@ -76,20 +80,28 @@ bash scripts/run-pi-harness.sh --provider dashscope --model qwen3.8-max --bootst
 | --- | --- | --- |
 | 契约 | `VERIFORGE_*` 环境变量 | 无外部契约，自包含 |
 | pi 配置 | 每 roll 生成 `PI_CODING_AGENT_DIR` + models.json | 复用全局 `~/.pi/agent/models.json`（由 `pi-smoke` 保证） |
-| 工具白名单 | 仅文件工具（无 bash） | **必开 bash**（任务需要 `emsctl` 命令执行） |
+| 工具白名单 | 仅文件工具（无 bash） | **唯一自定义工具 emsctl**（无 bash、无文件工具、无网络） |
 | 判定失败 | fail closed（退出非零） | 记录 verdict 但照常评分（回合状态真实存在） |
 | 运行位置 | runner 子进程 | 宿主机 + 容器桥接 |
 
 ## 5. 边界与已知事项（如实）
 
-- **防作弊是荣誉制**：pi 在宿主机有 bash，理论上可经绝对路径读到隐藏的
-  `scenario.json`。workspace 隔离 cwd、`AGENTS.md` 与 prompt 禁区只能防误
-  操作，不能防恶意模型。本 harness 定位是**本地评测工具**，不是官方榜单。
+- **工具级硬封锁（v2 起）**：模型没有 bash、没有文件读写、没有网络工具，
+  唯一工具 emsctl 在 harness 进程内以固定 argv 执行白名单子命令。三条外泄
+  路径的封堵情况——①宿主机文件读取（`cat scenario.json`）：无任何文件/
+  shell 工具，不可达；②容器路径（`exec simulator cat …`）：模型接触不到
+  podman，工具的桥接前缀固定为 `main` 服务；③网络外发：无网络工具，LLM
+  调用由 harness 进程自身完成。依据：历史两次成功跑的工具使用统计显示模型
+  从未读取任何仓库既有文件（文件活动仅限 workspace 内自建辅助脚本），因此
+  收敛为单工具不损失任务能力。
+- **残余边界**：封锁的执行者是 harness 自己的扩展代码——扩展校验逻辑的
+  bug 即漏洞（模型无法绕过工具层，但工具层本身的正确性由本仓库保障）；
+  对外声称完全隔离的评测仍应采用容器内 harness 架构（见「未来项」）。
 - pi 偶发的静默启动卡死（同命令偶发数分钟零输出）由 watchdog 兜底；wodex
   网关偶发 403 重试即恢复；moonshot Key 无 `[1m]` 变体权限，目录使用无后缀
   `kimi-k3`（256K）。
-- 本地 compose 下 `main` 使用默认网络（Harbor 侧为 no-network）——桥接模式
-  下 agent 拿不到容器 shell，无泄漏路径，属 parity 偏差，已记录。
+- 本地 compose 下 `main` 使用默认网络（Harbor 侧为 no-network）——封锁模式
+  下模型无法触达任何网络，该差异仅影响 harness 自身，已记录。
 
 ## 6. 未来项
 
