@@ -99,9 +99,14 @@ claude-opus-5 / kimi-k3 / qwen3.8-max 为 `max`，gpt-5-sol 为 `xhigh`；
 - **残余边界**：封锁的执行者是 harness 自己的扩展代码——扩展校验逻辑的
   bug 即漏洞（模型无法绕过工具层，但工具层本身的正确性由本仓库保障）；
   对外声称完全隔离的评测仍应采用容器内 harness 架构（见「未来项」）。
-- pi 偶发的静默启动卡死（同命令偶发数分钟零输出）由 watchdog 兜底；wodex
-  网关偶发 403 重试即恢复；moonshot Key 无 `[1m]` 变体权限，目录使用无后缀
-  `kimi-k3`（256K）。
+- pi 偶发的静默启动卡死（同命令偶发数分钟零输出）由 watchdog 兜底；moonshot
+  Key 无 `[1m]` 变体权限，目录使用无后缀 `kimi-k3`（256K）。
+- **wodex 网关对 pi 客户端的大请求 403**（"Your request was blocked"）：小
+  prompt 的 pi 调用可通过，携带完整任务 prompt（约 5–10KB）的 pi 调用稳定被
+  拦；用 curl 复刻完全相同的内容/参数/UA/编码（含 content blocks、
+  cache_control、stream、thinking、max_tokens=32768）全部 200。指向网关按
+  TLS 指纹 + 请求体大小的组合规则拦截 Node 客户端，需 wodex 侧解决；期间
+  wodex 两个模型（claude-opus-5 / gpt-5-sol）无法跑完整评测。
 - 本地 compose 下 `main` 使用默认网络（Harbor 侧为 no-network）——封锁模式
   下模型无法触达任何网络，该差异仅影响 harness 自身，已记录。
 
