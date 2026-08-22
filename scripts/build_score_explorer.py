@@ -26,7 +26,25 @@ NOTES = {
     "20260822T190841": "wodex 网关 403，未到模型",
 }
 
+# 数据版本断代映射（目录名前缀 -> task.toml 版本）。未列出的跑次使用其
+# 任务目录 task.toml 的当前版本。契约/数据改版后，在下面为改版时刻之后
+# 的新跑次登记新版本；历史跑次必须显式登记，否则会被错误归入新版本。
+VERSION_MAP: dict[str, str] = {
+    # 示例："20260901T000000": "1.1.0",
+}
+
 DIMENSION_KEYS = ["response", "coverage", "safety", "adaptation", "efficiency", "integrity"]
+
+
+def task_version(task_rel: str) -> str:
+    """读取任务目录 task.toml 里声明的版本号。"""
+    import re
+
+    toml_path = REPO / task_rel / "task.toml"
+    if not toml_path.is_file():
+        return "?"
+    match = re.search(r'^version\s*=\s*"([^"]+)"', toml_path.read_text(encoding="utf-8"), re.MULTILINE)
+    return match.group(1) if match else "?"
 
 
 def collect() -> list[dict]:
@@ -61,6 +79,10 @@ def collect() -> list[dict]:
         name = run_dir.name
         verdict = manifest.get("verdict", "unknown")
         invalid = verdict == "error_stop"
+        data_version = next(
+            (version for prefix, version in VERSION_MAP.items() if name.startswith(prefix)),
+            task_version(str(manifest.get("task", "tasks/sffd-rolling-surge-01"))),
+        )
         rows.append({
             "dir": name,
             "stamp": name[:15],
@@ -68,6 +90,7 @@ def collect() -> list[dict]:
             "provider": manifest.get("provider", "?"),
             "thinking": manifest.get("thinking", "?"),
             "harness": manifest.get("harness", "?"),
+            "data_version": data_version,
             "diagnostic": name.endswith("-diagnostic"),
             "verdict": verdict,
             "timed_out": bool(manifest.get("timed_out")),
@@ -137,6 +160,8 @@ TEMPLATE = r"""<!doctype html>
   .pill.qwen { border-color: #0891b2; color: #0891b2; }
   .pill.claude { border-color: #b45309; color: #b45309; }
   .pill.gpt { border-color: #15803d; color: #15803d; }
+  .pill.deepseek { border-color: #db2777; color: #db2777; }
+  .pill.other { border-color: #64748b; color: #64748b; }
   .pill.think-off     { border-color: #475569; color: #475569; }
   .pill.think-low     { border-color: #64748b; color: #64748b; }
   .pill.think-medium  { border-color: #2563eb; color: #2563eb; }
@@ -147,6 +172,9 @@ TEMPLATE = r"""<!doctype html>
   tr.row-qwen   { background: rgba(6, 182, 212, .07); }
   tr.row-claude { background: rgba(217, 119, 6, .08); }
   tr.row-gpt    { background: rgba(22, 163, 74, .07); }
+  tr.row-deepseek { background: rgba(219, 39, 119, .07); }
+  tr.row-other  { background: rgba(100, 116, 139, .06); }
+  select { background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
   .rank { font-weight: 700; color: var(--muted); }
   .rank-1 { color: var(--good); }
   .note-cell { color: var(--warn); font-size: 11px; max-width: 220px; white-space: normal; }
@@ -171,6 +199,8 @@ TEMPLATE = r"""<!doctype html>
       <label class="chk"><input type="checkbox" id="gateOff"> 假设分析：去掉 service gate（用 response×coverage 反解未门控三维）</label>
       <label class="chk"><input type="checkbox" id="hideInvalid" checked> 表格中灰显无效/超时/污染跑</label>
       <label class="chk"><input type="checkbox" id="onlyValid" checked> 汇总只计有效跑（剔除 403 无效、超时负例、污染跑）</label>
+      <label class="chk">思考档筛选：<select id="thinkFilter"></select></label>
+      <label class="chk">数据版本：<select id="versionFilter"></select></label>
     </div>
   </div>
 
@@ -185,7 +215,7 @@ TEMPLATE = r"""<!doctype html>
     <h2>全部跑次（点表头排序；「动态」列为当前权重重算值）</h2>
     <div style="overflow-x:auto; max-height: 70vh; overflow-y:auto;">
     <table id="runs"><thead><tr>
-      <th class="txt">时间</th><th class="txt">模型</th><th>档</th><th class="txt">模式</th>
+      <th class="txt">时间</th><th class="txt">模型</th><th>档</th><th class="txt">模式</th><th class="txt">版本</th>
       <th>覆盖</th><th>完成</th><th>高漏</th><th>迟到</th><th>无效写</th><th>动作</th><th>finish@</th>
       <th>resp</th><th>cov</th><th>saf</th><th>adap</th><th>effi</th><th>integ</th>
       <th>官方</th><th>动态</th><th>Δ</th><th class="txt">备注</th>
@@ -193,8 +223,8 @@ TEMPLATE = r"""<!doctype html>
     </div>
     <p class="legend">覆盖/完成 = 权重比（分母为可派事故总权重 8.25）；finish@ = finish 时的模拟时间 / 7200；
     resp/cov/…/integ 为六维原值；Δ = 动态 − 官方。hard_failure 的跑在任何权重下动态值恒为 0。
-    行底色区分模型（紫=kimi、青=qwen、橙=claude、绿=gpt）；思考档标签：灰=low、蓝=medium、紫=high、橙=xhigh、红=max。
-    汇总表按当前权重下的动态均值实时降序排名，调整权重即重排。</p>
+    行底色区分模型（紫=kimi、青=qwen、橙=claude、绿=gpt、粉=deepseek、灰=其他）；思考档标签：灰=low、蓝=medium、紫=high、橙=xhigh、红=max。
+    汇总表按当前权重下的动态均值实时降序排名，调整权重即重排；可用下拉按思考档或数据版本筛选（同时作用于汇总与明细）。</p>
   </div>
 </div>
 
@@ -269,15 +299,38 @@ function updateShares() {
   }
 }
 function modelClass(m) {
-  return m.includes("kimi") ? "kimi" : m.includes("qwen") ? "qwen" : m.includes("claude") ? "claude" : "gpt";
+  if (m.includes("kimi")) return "kimi";
+  if (m.includes("qwen")) return "qwen";
+  if (m.includes("claude")) return "claude";
+  if (m.includes("gpt")) return "gpt";
+  if (m.includes("deepseek")) return "deepseek";
+  return "other";
 }
 function thinkPill(t) {
   return `<span class="pill think-${t}">${t}</span>`;
 }
+let thinkFilter = "all", versionFilter = "all";
+function rowVisible(row) {
+  if (thinkFilter !== "all" && row.thinking !== thinkFilter) return false;
+  if (versionFilter !== "all" && (row.data_version || "?") !== versionFilter) return false;
+  return true;
+}
+function initFilters() {
+  const order = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+  const thinks = [...new Set(DATA.map(r => r.thinking))]
+    .sort((a, b) => (order.indexOf(a) ?? 99) - (order.indexOf(b) ?? 99));
+  const tSel = document.getElementById("thinkFilter");
+  tSel.innerHTML = `<option value="all">全部档位</option>` + thinks.map(t => `<option value="${t}">${t}</option>`).join("");
+  tSel.addEventListener("change", () => { thinkFilter = tSel.value; render(); });
+  const versions = [...new Set(DATA.map(r => r.data_version || "?"))].sort();
+  const vSel = document.getElementById("versionFilter");
+  vSel.innerHTML = `<option value="all">全部版本</option>` + versions.map(v => `<option value="${v}">${v}</option>`).join("");
+  vSel.addEventListener("change", () => { versionFilter = vSel.value; render(); });
+}
 function renderSummary() {
   const groups = {};
   for (const row of DATA) {
-    if (excludedFromSummary(row)) continue;
+    if (excludedFromSummary(row) || !rowVisible(row)) continue;
     const key = row.model + "|" + row.thinking;
     (groups[key] ||= []).push(row);
   }
@@ -304,7 +357,7 @@ function renderSummary() {
 }
 function renderRuns() {
   const tbody = document.querySelector("#runs tbody");
-  let rows = [...DATA];
+  let rows = [...DATA].filter(rowVisible);
   if (sortKey) rows.sort((a,b) => {
     const va = a[sortKey], vb = b[sortKey];
     const c = (va===null||va===undefined? -1 : va===vb? 0 : va<vb? -1:1);
@@ -318,7 +371,7 @@ function renderRuns() {
     const modelPill = `<span class="pill ${modelClass(row.model)}">${row.model}</span>`;
     const mode = row.harness.replace("pi-host-bridge/","") + (row.diagnostic ? "·诊断" : "");
     return `<tr class="${classify(row)}${(document.getElementById("hideInvalid").checked && classify(row)) ? " invalid-row":""} row-${modelClass(row.model)}">
-      <td class="txt">${row.stamp}</td><td class="txt">${modelPill}</td><td>${thinkPill(row.thinking)}</td><td class="txt">${mode}</td>
+      <td class="txt">${row.stamp}</td><td class="txt">${modelPill}</td><td>${thinkPill(row.thinking)}</td><td class="txt">${mode}</td><td class="txt">${row.data_version || "?"}</td>
       <td>${fmt(row.covered,2)}/${fmt(row.total_weight,2)}</td>
       <td>${fmt(row.completed,2)}/${fmt(row.total_weight,2)}</td>
       <td>${row.high_missed ?? "—"}</td><td>${row.late ?? "—"}</td><td>${row.invalid_actions ?? "—"}</td>
@@ -339,7 +392,7 @@ document.getElementById("gateOff").addEventListener("change", render);
 document.getElementById("hideInvalid").addEventListener("change", render);
 document.getElementById("onlyValid").addEventListener("change", render);
 document.querySelectorAll("#runs th").forEach((th, i) => {
-  const keys = ["stamp","model","thinking","harness","covered","completed","high_missed","late","invalid_actions","actions","finish_at",
+  const keys = ["stamp","model","thinking","harness","data_version","covered","completed","high_missed","late","invalid_actions","actions","finish_at",
                 null,null,null,null,null,null,"overall_official",null,null,null];
   const key = keys[i];
   if (!key) return;
@@ -349,6 +402,7 @@ document.querySelectorAll("#runs th").forEach((th, i) => {
   });
 });
 
+initFilters();
 renderControls();
 render();
 </script>
