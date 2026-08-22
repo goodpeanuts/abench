@@ -41,7 +41,9 @@ bash scripts/run-pi-harness.sh --provider dashscope --model qwen3.8-max --thinki
 bash scripts/run-pi-harness.sh --provider dashscope --model qwen3.8-max --bootstrap-only
 ```
 
-常用选项：`--thinking off|minimal|low|medium|high|xhigh|max`（默认 `low`）、
+常用选项：`--thinking <档>`（**默认且仅接受所选模型的最高档**——
+claude-opus-5 / kimi-k3 / qwen3.8-max 为 `max`，gpt-5-sol 为 `xhigh`；
+传入更低档位会被拒绝，见 AGENTS.md「测试运行约定」）、
 `--timeout <秒>`（默认 840，= Harbor `agent.timeout_sec` 900 减余量）、
 `--task <目录>`、`--keep`（保留容器与卷）、`--no-verify`（跳过评分）、
 `--skip-smoke`。密钥以环境变量注入当前 shell（`WODEX_API_KEY` /

@@ -22,7 +22,7 @@ installed_models="$HOME/.pi/agent/models.json"
 
 provider="${PI_HARNESS_PROVIDER:-}"
 model="${PI_HARNESS_MODEL:-}"
-thinking="${PI_HARNESS_THINKING:-low}"
+thinking="${PI_HARNESS_THINKING:-}"
 timeout_sec="${PI_HARNESS_TIMEOUT_SEC:-840}"
 task_rel="${PI_HARNESS_TASK:-tasks/sffd-rolling-surge-01}"
 project="${PI_HARNESS_PROJECT:-sffd-pi}"
@@ -54,10 +54,29 @@ done
   echo "必须指定 --provider 与 --model（或 PI_HARNESS_PROVIDER / PI_HARNESS_MODEL）" >&2
   exit 2
 }
-case "$thinking" in
-  off|minimal|low|medium|high|xhigh|max) ;;
-  *) echo "推理档 ${thinking} 不在 pi 支持的档位内（off|minimal|low|medium|high|xhigh|max）" >&2; exit 2 ;;
-esac
+
+# 仓库约束（AGENTS.md「测试运行约定」）：所有评测运行必须使用模型相应的
+# 最高思考档；降档一律拒绝，不允许静默降级。
+resolve_max_thinking() {
+  case "$1/$2" in
+    wodex/claude-opus-5|moonshot/kimi-k3|dashscope/qwen3.8-max)
+      printf '%s\n' "max" ;;
+    wodex-gpt/gpt-5-sol)
+      printf '%s\n' "xhigh" ;;
+    *)
+      printf '%s\n' "provider/model 组合未配置最高思考档：$1/$2" >&2
+      return 1
+      ;;
+  esac
+}
+max_thinking="$(resolve_max_thinking "$provider" "$model")" || exit 2
+if [[ -z "$thinking" ]]; then
+  thinking="$max_thinking"
+elif [[ "$thinking" != "$max_thinking" ]]; then
+  echo "仓库约束：${provider}/${model} 的评测必须使用最高思考档 ${max_thinking}（收到 ${thinking}），不接受降档" >&2
+  exit 2
+fi
+
 [[ "$timeout_sec" =~ ^[0-9]+$ ]] || { echo "--timeout 必须是正整数秒" >&2; exit 2; }
 
 task_dir="$repo_root/$task_rel"
@@ -187,7 +206,7 @@ if [[ "$skip_smoke" -ne 1 ]]; then
   agent_smoke_out="$(
     cd "$workspace" && PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 \
     "$pi_bin" -p "只回复：OK" --approve --no-session --mode json \
-      --provider "$provider" --model "$model" --thinking off \
+      --provider "$provider" --model "$model" --thinking "$max_thinking" \
       --tools emsctl --extension "$pi_ext" \
       --no-extensions --no-skills --no-prompt-templates --no-themes
   )" || { log "agent 烟测失败：扩展加载或工具注册异常"; exit 1; }
