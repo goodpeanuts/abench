@@ -13,3 +13,8 @@ replay-a/
 replay-b/
 hidden-variants/
 hidden_variants_manifest.json
+
+# pi harness 运行产物（run-manifest 等位于其下；事件/状态日志已被 *.jsonl 覆盖）
+results/pi-runs/
+# pi-setup 安装目录时的备份
+*.bak.*
