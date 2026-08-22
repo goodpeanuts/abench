@@ -137,6 +137,18 @@ TEMPLATE = r"""<!doctype html>
   .pill.qwen { border-color: #0891b2; color: #0891b2; }
   .pill.claude { border-color: #b45309; color: #b45309; }
   .pill.gpt { border-color: #15803d; color: #15803d; }
+  .pill.think-off     { border-color: #475569; color: #475569; }
+  .pill.think-low     { border-color: #64748b; color: #64748b; }
+  .pill.think-medium  { border-color: #2563eb; color: #2563eb; }
+  .pill.think-high    { border-color: #7c3aed; color: #7c3aed; }
+  .pill.think-xhigh   { border-color: #ea580c; color: #ea580c; }
+  .pill.think-max     { border-color: #dc2626; color: #dc2626; background: rgba(220,38,38,.08); }
+  tr.row-kimi   { background: rgba(147, 51, 234, .07); }
+  tr.row-qwen   { background: rgba(6, 182, 212, .07); }
+  tr.row-claude { background: rgba(217, 119, 6, .08); }
+  tr.row-gpt    { background: rgba(22, 163, 74, .07); }
+  .rank { font-weight: 700; color: var(--muted); }
+  .rank-1 { color: var(--good); }
   .note-cell { color: var(--warn); font-size: 11px; max-width: 220px; white-space: normal; }
   .legend { color: var(--muted); font-size: 12px; margin-top: 8px; }
   .delta-up { color: var(--good); } .delta-down { color: var(--bad); }
@@ -165,7 +177,7 @@ TEMPLATE = r"""<!doctype html>
   <div class="card">
     <h2>分组汇总（当前权重下的动态 overall）</h2>
     <table id="summary"><thead><tr>
-      <th class="txt">模型</th><th>思考档</th><th>样本</th><th>均值</th><th>最低</th><th>最高</th><th>官方均值</th>
+      <th>#</th><th class="txt">模型</th><th class="txt">思考档</th><th>样本</th><th>均值</th><th>最低</th><th>最高</th><th>官方均值</th>
     </tr></thead><tbody></tbody></table>
   </div>
 
@@ -180,7 +192,9 @@ TEMPLATE = r"""<!doctype html>
     </tr></thead><tbody></tbody></table>
     </div>
     <p class="legend">覆盖/完成 = 权重比（分母为可派事故总权重 8.25）；finish@ = finish 时的模拟时间 / 7200；
-    resp/cov/…/integ 为六维原值；Δ = 动态 − 官方。hard_failure 的跑在任何权重下动态值恒为 0。</p>
+    resp/cov/…/integ 为六维原值；Δ = 动态 − 官方。hard_failure 的跑在任何权重下动态值恒为 0。
+    行底色区分模型（紫=kimi、青=qwen、橙=claude、绿=gpt）；思考档标签：灰=low、蓝=medium、紫=high、橙=xhigh、红=max。
+    汇总表按当前权重下的动态均值实时降序排名，调整权重即重排。</p>
   </div>
 </div>
 
@@ -254,6 +268,12 @@ function updateShares() {
     if (el) el.textContent = (share[k]*100).toFixed(1) + "%";
   }
 }
+function modelClass(m) {
+  return m.includes("kimi") ? "kimi" : m.includes("qwen") ? "qwen" : m.includes("claude") ? "claude" : "gpt";
+}
+function thinkPill(t) {
+  return `<span class="pill think-${t}">${t}</span>`;
+}
 function renderSummary() {
   const groups = {};
   for (const row of DATA) {
@@ -262,22 +282,25 @@ function renderSummary() {
     (groups[key] ||= []).push(row);
   }
   const tbody = document.querySelector("#summary tbody");
-  const order = {"low":0, "medium":1, "max":2, "xhigh":3};
-  const keys = Object.keys(groups).sort((a,b) => {
-    const [ma,ta] = a.split("|"), [mb,tb] = b.split("|");
-    return ma===mb ? (order[ta]??9)-(order[tb]??9) : ma.localeCompare(mb);
-  });
-  tbody.innerHTML = keys.map(key => {
-    const rows = groups[key];
+  const mean = a => a.reduce((x,y)=>x+y,0)/a.length;
+  const entries = Object.entries(groups).map(([key, rows]) => {
     const dyn = rows.map(dynamicOverall);
-    const off = rows.map(r => r.overall_official||0);
-    const mean = a => a.reduce((x,y)=>x+y,0)/a.length;
-    const [model, thinking] = key.split("|");
-    return `<tr><td class="txt"><span class="pill ${model.includes("kimi")?"kimi":model.includes("qwen")?"qwen":model.includes("claude")?"claude":"gpt"}">${model}</span></td>
-      <td>${thinking}</td><td>${rows.length}</td>
-      <td><b>${fmt(mean(dyn))}</b></td><td>${fmt(Math.min(...dyn))}</td><td>${fmt(Math.max(...dyn))}</td>
-      <td>${fmt(mean(off))}</td></tr>`;
-  }).join("") || `<tr><td colspan="7" class="txt">（无有效样本）</td></tr>`;
+    return { model: key.split("|")[0], thinking: key.split("|")[1],
+             n: rows.length, dyn, meanDyn: mean(dyn),
+             minDyn: Math.min(...dyn), maxDyn: Math.max(...dyn),
+             meanOff: mean(rows.map(r => r.overall_official||0)) };
+  });
+  // 按当前权重下的动态均值实时降序排名（权重一变即重排）
+  entries.sort((a,b) => b.meanDyn - a.meanDyn);
+  const maxMean = Math.max(...entries.map(e => e.meanDyn), 1e-9);
+  tbody.innerHTML = entries.map((e, i) => `<tr class="row-${modelClass(e.model)}">
+      <td class="rank ${i===0?"rank-1":""}">${i+1}</td>
+      <td class="txt"><span class="pill ${modelClass(e.model)}">${e.model}</span></td>
+      <td class="txt">${thinkPill(e.thinking)}</td><td>${e.n}</td>
+      <td><b>${fmt(e.meanDyn)}</b><span class="bar" style="width:${(e.meanDyn/maxMean*80).toFixed(0)}px"></span></td>
+      <td>${fmt(e.minDyn)}</td><td>${fmt(e.maxDyn)}</td>
+      <td>${fmt(e.meanOff)}</td></tr>`).join("")
+    || `<tr><td colspan="8" class="txt">（无有效样本）</td></tr>`;
 }
 function renderRuns() {
   const tbody = document.querySelector("#runs tbody");
@@ -292,10 +315,10 @@ function renderRuns() {
     const off = row.overall_official || 0;
     const delta = dyn - off;
     const finish = row.saw_finish ? (row.finish_at + "/7200") : (row.actions ? "未finish" : "—");
-    const modelPill = `<span class="pill ${row.model.includes("kimi")?"kimi":row.model.includes("qwen")?"qwen":row.model.includes("claude")?"claude":"gpt"}">${row.model}</span>`;
+    const modelPill = `<span class="pill ${modelClass(row.model)}">${row.model}</span>`;
     const mode = row.harness.replace("pi-host-bridge/","") + (row.diagnostic ? "·诊断" : "");
-    return `<tr class="${classify(row)}${(document.getElementById("hideInvalid").checked && classify(row)) ? " invalid-row":""}">
-      <td class="txt">${row.stamp}</td><td class="txt">${modelPill}</td><td>${row.thinking}</td><td class="txt">${mode}</td>
+    return `<tr class="${classify(row)}${(document.getElementById("hideInvalid").checked && classify(row)) ? " invalid-row":""} row-${modelClass(row.model)}">
+      <td class="txt">${row.stamp}</td><td class="txt">${modelPill}</td><td>${thinkPill(row.thinking)}</td><td class="txt">${mode}</td>
       <td>${fmt(row.covered,2)}/${fmt(row.total_weight,2)}</td>
       <td>${fmt(row.completed,2)}/${fmt(row.total_weight,2)}</td>
       <td>${row.high_missed ?? "—"}</td><td>${row.late ?? "—"}</td><td>${row.invalid_actions ?? "—"}</td>
