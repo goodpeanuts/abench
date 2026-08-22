@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run-pi-harness.sh — 宿主机 pi harness + 容器桥接（abench）
 #
-# 架构：pi 在宿主机运行（有 LLM API 网络、有 ~/.pi/agent/models.json provider
+# 架构：pi 在宿主机运行（有 LLM API 网络、使用本次运行隔离的 provider
 # 目录），但模型**没有任何文件/shell/网络工具**：经 scripts/pi-emsctl-tool.mjs
 # 注册的唯一工具 emsctl，把每次调用以固定 argv（不经 shell）桥接到
 # `podman compose … exec -T main emsctl <子命令>`。容器保持隔离；宿主机上的
@@ -11,19 +11,22 @@
 #
 # 用法：
 #   bash scripts/run-pi-harness.sh --provider dashscope --model qwen3.8-max
-#   常用选项：--thinking low|--task <dir>|--timeout 840|--bootstrap-only|
+#   常用选项：--thinking max|--task <dir>|--timeout 840|--bootstrap-only|
 #             --skip-smoke|--keep|--no-verify
-# 环境变量：PI_HARNESS_PROVIDER/MODEL/THINKING/TIMEOUT_SEC/TASK/PROJECT、PI_BIN。
-# 密钥变量只按名检查并透传给 pi，绝不写入任何文件或日志。
+#   诊断扫描可显式加 --allow-any-thinking；正常评测不得使用该逃生口。
+# 环境变量：PI_HARNESS_PROVIDER/MODEL/THINKING/TIMEOUT_SEC/SMOKE_TIMEOUT_SEC/
+# TASK/PROJECT、PI_BIN。源配置只保存密钥变量名，harness 不主动序列化密钥值。
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-installed_models="$HOME/.pi/agent/models.json"
+src_models="$repo_root/config/pi/models.json"
+src_settings="$repo_root/config/pi/settings.json"
 
 provider="${PI_HARNESS_PROVIDER:-}"
 model="${PI_HARNESS_MODEL:-}"
 thinking="${PI_HARNESS_THINKING:-}"
 timeout_sec="${PI_HARNESS_TIMEOUT_SEC:-840}"
+agent_smoke_timeout_sec="${PI_HARNESS_SMOKE_TIMEOUT_SEC:-300}"
 task_rel="${PI_HARNESS_TASK:-tasks/sffd-rolling-surge-01}"
 project="${PI_HARNESS_PROJECT:-sffd-pi}"
 pi_bin="${PI_BIN:-}"
@@ -31,7 +34,14 @@ bootstrap_only=0
 skip_smoke=0
 keep=0
 no_verify=0
+allow_any_thinking=0
 pi_ext="$repo_root/scripts/pi-emsctl-tool.mjs"
+runtime_pi_dir=""
+runtime_models=""
+active_pi_pid=""
+diagnostic=0
+run_kind="evaluation"
+COMPOSE=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -45,6 +55,7 @@ while [[ $# -gt 0 ]]; do
     --skip-smoke) skip_smoke=1; shift ;;
     --keep) keep=1; shift ;;
     --no-verify) no_verify=1; shift ;;
+    --allow-any-thinking) allow_any_thinking=1; shift ;;
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "未知参数：$1" >&2; exit 2 ;;
   esac
@@ -56,12 +67,12 @@ done
 }
 
 # 仓库约束（AGENTS.md「测试运行约定」）：所有评测运行必须使用模型相应的
-# 最高思考档；降档一律拒绝，不允许静默降级。
+# 最高思考档；正常评测降档一律拒绝。--allow-any-thinking 只供显式诊断扫描。
 resolve_max_thinking() {
   case "$1/$2" in
-    wodex/claude-opus-5|moonshot/kimi-k3|dashscope/qwen3.8-max)
+    wodex/claude-opus-5|moonshot/kimi-k3|dashscope/qwen3.8-max|deepseek/deepseek-v4-pro)
       printf '%s\n' "max" ;;
-    wodex-gpt/gpt-5-sol)
+    wodex-gpt/gpt-5.6-sol)
       printf '%s\n' "xhigh" ;;
     *)
       printf '%s\n' "provider/model 组合未配置最高思考档：$1/$2" >&2
@@ -72,15 +83,112 @@ resolve_max_thinking() {
 max_thinking="$(resolve_max_thinking "$provider" "$model")" || exit 2
 if [[ -z "$thinking" ]]; then
   thinking="$max_thinking"
-elif [[ "$thinking" != "$max_thinking" ]]; then
-  echo "仓库约束：${provider}/${model} 的评测必须使用最高思考档 ${max_thinking}（收到 ${thinking}），不接受降档" >&2
+elif [[ "$thinking" != "$max_thinking" && "$allow_any_thinking" -ne 1 ]]; then
+  echo "仓库约束：${provider}/${model} 的评测必须使用最高思考档 ${max_thinking}（收到 ${thinking}），不接受降档；诊断扫描请显式加 --allow-any-thinking" >&2
   exit 2
 fi
+case "$thinking" in
+  off|minimal|low|medium|high|xhigh|max) ;;
+  *) echo "推理档 ${thinking} 不在 pi 支持的档位内（off|minimal|low|medium|high|xhigh|max）" >&2; exit 2 ;;
+esac
+if [[ "$allow_any_thinking" -eq 1 ]]; then
+  diagnostic=1
+  run_kind="diagnostic"
+  no_verify=1
+fi
 
-[[ "$timeout_sec" =~ ^[0-9]+$ ]] || { echo "--timeout 必须是正整数秒" >&2; exit 2; }
+[[ "$timeout_sec" =~ ^[1-9][0-9]*$ ]] || { echo "--timeout 必须是正整数秒" >&2; exit 2; }
+[[ "$agent_smoke_timeout_sec" =~ ^[1-9][0-9]*$ ]] || {
+  echo "PI_HARNESS_SMOKE_TIMEOUT_SEC 必须是正整数秒" >&2
+  exit 2
+}
 
 task_dir="$repo_root/$task_rel"
 log() { printf '[pi-harness] %s\n' "$*"; }
+if [[ "$diagnostic" -eq 1 ]]; then
+  log "诊断模式：thinking=${thinking}，强制跳过 verifier，结果不得计作正式评测"
+fi
+
+cleanup() {
+  if [[ -n "${active_pi_pid}" ]] && kill -0 "${active_pi_pid}" 2>/dev/null; then
+    kill "${active_pi_pid}" 2>/dev/null || true
+    for _ in $(seq 1 5); do
+      kill -0 "${active_pi_pid}" 2>/dev/null || break
+      sleep 1
+    done
+    kill -9 "${active_pi_pid}" 2>/dev/null || true
+    wait "${active_pi_pid}" 2>/dev/null || true
+  fi
+  active_pi_pid=""
+  if [[ "${keep:-0}" != "1" && "${#COMPOSE[@]}" -gt 0 ]]; then
+    podman "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
+  fi
+  if [[ -n "${runtime_pi_dir}" && -d "${runtime_pi_dir}" \
+        && "$(basename "${runtime_pi_dir}")" == abench-pi-harness.* ]]; then
+    rm -rf -- "${runtime_pi_dir}"
+  fi
+}
+trap cleanup EXIT
+
+classify_event_file() {
+  python3 - "$1" "${2:-}" <<'PY'
+import json
+import sys
+
+expected_text = sys.argv[2]
+saw_agent_end = False
+saw_assistant_message = False
+saw_malformed_event = False
+final_stop = None
+final_text = ""
+try:
+    with open(sys.argv[1], encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                saw_malformed_event = True
+                continue
+            if event.get("type") == "agent_end":
+                saw_agent_end = True
+            if event.get("type") != "message_end":
+                continue
+            message = event.get("message") or {}
+            if message.get("role") != "assistant":
+                continue
+            saw_assistant_message = True
+            final_stop = message.get("stopReason")
+            content = message.get("content") or []
+            if isinstance(content, str):
+                final_text = content
+            else:
+                final_text = "".join(
+                    block.get("text", "")
+                    for block in content
+                    if isinstance(block, dict) and block.get("type") == "text"
+                )
+except OSError:
+    print("no_agent_end")
+else:
+    if saw_malformed_event:
+        print("malformed_event")
+    elif not saw_agent_end:
+        print("no_agent_end")
+    elif not saw_assistant_message or not final_stop:
+        print("incomplete_assistant")
+    elif final_stop == "error":
+        print("error_stop")
+    elif final_stop not in {"stop", "endTurn"}:
+        print("nonterminal_stop")
+    elif expected_text and final_text.strip() != expected_text:
+        print("unexpected_text")
+    else:
+        print("ok")
+PY
+}
 
 # ---------- 1. 预检 ----------
 
@@ -99,13 +207,19 @@ compose_main="$task_dir/environment/docker-compose.yaml"
 compose_local="$task_dir/environment/docker-compose.local.yaml"
 [[ -f "$compose_main" && -f "$compose_local" ]] || { log "缺少 compose 文件"; exit 2; }
 [[ -f "$pi_ext" ]] || { log "缺少扩展文件：${pi_ext}"; exit 2; }
+[[ -f "$src_models" && -f "$src_settings" ]] || { log "缺少 Pi 源配置"; exit 2; }
 
-if [[ "$skip_smoke" -ne 1 ]]; then
-  log "静态冒烟：bash scripts/pi-smoke.sh --no-call"
-  bash "$repo_root/scripts/pi-smoke.sh" --no-call
-fi
+runtime_pi_dir="$(mktemp -d "${TMPDIR:-/tmp}/abench-pi-harness.XXXXXX")"
+cp "$src_models" "$runtime_pi_dir/models.json"
+cp "$src_settings" "$runtime_pi_dir/settings.json"
+runtime_models="$runtime_pi_dir/models.json"
+export PI_CODING_AGENT_DIR="$runtime_pi_dir"
+log "Pi 配置隔离：五模型 1M、最高思考档、900K 压缩策略"
 
-# 密钥变量名从已安装目录解析（只查存在性，不读值）
+log "配置预检：检查本次运行的隔离 models/settings"
+bash "$repo_root/scripts/pi-smoke.sh" --no-call
+
+# 密钥变量名从本次运行的隔离目录解析（只查存在性，不读值）
 key_var="$(node -e '
   const fs = require("fs");
   const cfg = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
@@ -114,7 +228,7 @@ key_var="$(node -e '
   const m = String(p.apiKey || "").match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
   if (!m) { console.error("apiKey 不是 $ENV_VAR 形式"); process.exit(1); }
   console.log(m[1]);
-' "$installed_models" "$provider")" || { log "无法从 ${installed_models} 解析 ${provider} 的密钥变量"; exit 1; }
+' "$runtime_models" "$provider")" || { log "无法从 ${runtime_models} 解析 ${provider} 的密钥变量"; exit 1; }
 if [[ -z "${!key_var:-}" ]]; then
   log "缺少密钥：请先导出 ${key_var}（只注入当前 shell，不要写入任何文件）"
   exit 1
@@ -135,17 +249,11 @@ done
 podman compose version >/dev/null 2>&1 || { log "podman compose 不可用"; exit 1; }
 
 COMPOSE=(compose -f "$compose_main" -f "$compose_local" -p "$project")
-teardown() {
-  if [[ "${keep:-0}" != "1" ]]; then
-    podman "${COMPOSE[@]:-}" down -v --remove-orphans >/dev/null 2>&1 || true
-  fi
-}
-trap teardown EXIT
 
 # ---------- 2. run dir ----------
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-run_dir="$repo_root/results/pi-runs/${stamp}-${provider}-${model}"
+run_dir="$repo_root/results/pi-runs/${stamp}-${provider}-${model}-${thinking}-${run_kind}"
 workspace="$run_dir/workspace"
 state_dir="$run_dir/state"
 verifier_dir="$run_dir/verifier"
@@ -203,16 +311,48 @@ fi
 
 if [[ "$skip_smoke" -ne 1 ]]; then
   log "agent 烟测：一次最小调用验证扩展与唯一工具 emsctl 可用"
-  agent_smoke_out="$(
-    cd "$workspace" && PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 \
-    "$pi_bin" -p "只回复：OK" --approve --no-session --mode json \
-      --provider "$provider" --model "$model" --thinking "$max_thinking" \
+  agent_smoke_events="$runtime_pi_dir/agent-smoke-events.jsonl"
+  agent_smoke_stderr="$runtime_pi_dir/agent-smoke-stderr.log"
+  (
+    cd "$workspace"
+    export PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0
+    exec "$pi_bin" -p "只回复：OK" --approve --no-session --mode json \
+      --provider "$provider" --model "$model" --thinking "$thinking" \
+      --system-prompt "You are an API connectivity checker. Reply exactly OK." \
+      --no-context-files \
       --tools emsctl --extension "$pi_ext" \
       --no-extensions --no-skills --no-prompt-templates --no-themes
-  )" || { log "agent 烟测失败：扩展加载或工具注册异常"; exit 1; }
-  grep -q '"type":"agent_end"' <<<"$agent_smoke_out" || {
-    log "agent 烟测未产生 agent_end"; exit 1
-  }
+  ) >"$agent_smoke_events" 2>"$agent_smoke_stderr" &
+  active_pi_pid=$!
+  agent_smoke_rc=0
+  agent_smoke_timed_out=0
+  for ((elapsed = 0; elapsed < agent_smoke_timeout_sec; elapsed++)); do
+    kill -0 "$active_pi_pid" 2>/dev/null || break
+    sleep 1
+  done
+  if kill -0 "$active_pi_pid" 2>/dev/null; then
+    agent_smoke_timed_out=1
+    kill "$active_pi_pid" 2>/dev/null || true
+    sleep 1
+    kill -9 "$active_pi_pid" 2>/dev/null || true
+  fi
+  wait "$active_pi_pid" || agent_smoke_rc=$?
+  active_pi_pid=""
+  if [[ "$agent_smoke_timed_out" -eq 1 ]]; then
+    log "agent 烟测超过 ${agent_smoke_timeout_sec}s，已终止"
+    exit 124
+  fi
+  if [[ "$agent_smoke_rc" -ne 0 ]]; then
+    log "agent 烟测失败：扩展加载或工具注册异常"
+    tail -n 10 "$agent_smoke_stderr" >&2 || true
+    exit 1
+  fi
+  agent_smoke_verdict="$(classify_event_file "$agent_smoke_events" "OK")" || agent_smoke_verdict="no_agent_end"
+  if [[ "$agent_smoke_verdict" != "ok" ]]; then
+    log "agent 烟测事件流异常：${agent_smoke_verdict}"
+    tail -n 10 "$agent_smoke_events" >&2 || true
+    exit 1
+  fi
 fi
 
 # ---------- 5. 组装 prompt ----------
@@ -265,6 +405,7 @@ log "启动 pi（单工具硬封锁）：provider=${provider} model=${model} thi
     --no-extensions --no-skills --no-prompt-templates --no-themes
 ) > "$events_file" 2> "$stderr_file" &
 pi_pid=$!
+active_pi_pid="$pi_pid"
 
 timed_out=0
 pi_rc=0
@@ -292,44 +433,20 @@ while :; do
     log "仍在运行（${elapsed}s/${timeout_sec}s，事件 $(wc -l < "$events_file" 2>/dev/null || echo 0) 行）"
   fi
 done
+active_pi_pid=""
 log "pi 结束：退出码 ${pi_rc}，超时标志 ${timed_out}"
 
 # ---------- 7. 事件流判定 ----------
-# pi 的 CLI 即使最后一轮以 API 错误收场也以 0 退出；判定失败不阻断评分
-# （回合状态真实存在），只记入 manifest。
+# pi 的 CLI 即使最后一轮以 API 错误收场也可能以 0 退出；判定失败仍先完成
+# 状态收集、评分和 manifest，最后以非零退出码报告。
 
-verdict="$(python3 - "$events_file" <<'PY'
-import json, sys
-
-saw_agent_end = False
-final_stop = None
-try:
-    with open(sys.argv[1], encoding="utf-8", errors="replace") as stream:
-        for line in stream:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if event.get("type") == "agent_end":
-                saw_agent_end = True
-            if event.get("type") == "message_end":
-                message = event.get("message") or {}
-                if message.get("role") == "assistant":
-                    final_stop = message.get("stopReason")
-except OSError:
-    print("no_agent_end")
-else:
-    if not saw_agent_end:
-        print("no_agent_end")
-    elif final_stop == "error":
-        print("error_stop")
-    else:
-        print("ok")
-PY
-)" || verdict="no_agent_end"
+if [[ "$timed_out" -eq 1 ]]; then
+  verdict="timeout"
+elif [[ "$pi_rc" -ne 0 ]]; then
+  verdict="pi_exit_error"
+else
+  verdict="$(classify_event_file "$events_file")" || verdict="no_agent_end"
+fi
 
 # ---------- 8. 收集 sidecar 状态 ----------
 
@@ -396,11 +513,12 @@ fi
 finished_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 python3 - "$run_dir" "$task_rel" "$provider" "$model" "$thinking" "emsctl" \
   "$pi_version" "$project" "$started_at" "$finished_at" "$timeout_sec" \
-  "$timed_out" "$pi_rc" "$verdict" "$reward_summary" <<'PY'
+  "$timed_out" "$pi_rc" "$verdict" "$diagnostic" "$reward_summary" <<'PY'
 import json, pathlib, sys
 
 (run_dir, task, provider, model, thinking, tools, pi_version, project,
- started, finished, timeout_sec, timed_out, pi_rc, verdict, reward_summary) = sys.argv[1:16]
+ started, finished, timeout_sec, timed_out, pi_rc, verdict, diagnostic,
+ reward_summary) = sys.argv[1:17]
 root = pathlib.Path(run_dir)
 reward = None
 action_count = None
@@ -427,6 +545,7 @@ manifest = {
     "timed_out": timed_out == "1",
     "pi_exit_code": int(pi_rc),
     "verdict": verdict,
+    "diagnostic": diagnostic == "1",
     "reward": reward,
     "action_count": action_count,
     "state_files": state_files,
@@ -445,3 +564,6 @@ manifest = {
 PY
 
 log "完成：verdict=${verdict}（run 目录：${run_dir}）"
+if [[ "$verdict" != "ok" ]]; then
+  exit 1
+fi

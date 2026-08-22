@@ -1,0 +1,14 @@
+{
+  "defaultThinkingLevel": "max",
+  "enabledModels": [
+    "wodex/claude-opus-5:max",
+    "moonshot/kimi-k3:max",
+    "dashscope/qwen3.8-max:max",
+    "deepseek/deepseek-v4-pro:max",
+    "wodex-gpt/gpt-5.6-sol:xhigh"
+  ],
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 100000
+  }
+}

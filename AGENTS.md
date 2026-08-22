@@ -13,9 +13,11 @@
 ## 测试运行约定（面向操作者与 harness，由 run-pi-harness.sh 强制执行）
 
 - **所有评测测试必须使用所选模型的最高思考能力**，不允许降档：
-  - `wodex/claude-opus-5`、`moonshot/kimi-k3`、`dashscope/qwen3.8-max`
+  - `wodex/claude-opus-5`、`moonshot/kimi-k3`、`dashscope/qwen3.8-max`、
+    `deepseek/deepseek-v4-pro`
     → `--thinking max`
-  - `wodex-gpt/gpt-5-sol` → `--thinking xhigh`
+  - `wodex-gpt/gpt-5.6-sol` → `--thinking xhigh`
 - `scripts/run-pi-harness.sh` 默认即取该档位；显式传入更低档位会被拒绝
   （fail closed），不存在「省成本的低档评测跑」。
-
+- `--allow-any-thinking` 仅供显式诊断扫描；使用该逃生口的运行不得计作正式评测。
+- 五个模型均固定声明 1M 上下文；自动压缩保留 100K tokens，即在 900K 时触发。
