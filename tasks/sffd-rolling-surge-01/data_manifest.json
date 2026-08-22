@@ -1,0 +1,567 @@
+{
+  "schema_version": "sffd-data-manifest.v1",
+  "dataset": {
+    "dataset_id": "nuek-vuh3",
+    "name": "Fire Department and Emergency Medical Services Dispatched Calls for Service",
+    "official_data_url": "https://data.sfgov.org/Public-Safety/Fire-Department-and-Emergency-Medical-Services-Dis/nuek-vuh3",
+    "official_soda_csv_url": "https://data.sfgov.org/resource/nuek-vuh3.csv",
+    "official_metadata_url": "https://data.sfgov.org/api/views/nuek-vuh3",
+    "license": "PDDL",
+    "publisher": "San Francisco Fire Department / Department of Emergency Management",
+    "record_semantics": "one response row per unit and incident; an incident can have multiple rows",
+    "portal_snapshot": {
+      "reported_total_rows": 7408845,
+      "reported_time_start": "2000-04-12",
+      "reported_time_end": "2026-08-21",
+      "reported_business_fields": 36,
+      "metadata_can_include_computed_fields": true
+    }
+  },
+  "freeze": {
+    "frozen_at": "2026-08-22",
+    "fetched_at_utc": "2026-08-22T09:50:55Z",
+    "source_csv_name": "raw-response-slice.csv",
+    "source_csv_sha256": "0f1a990252574048f118da202438ebc51233d954c7a71067663b610343648f6b",
+    "source_csv_bytes": 727370,
+    "source_csv_data_rows": 1356,
+    "source_csv_fields": 36,
+    "schema_sha256": "b5c88a74a5bbedbce283120b5921dbd5ceb4c81a626d2f6e62b291a03360d06d",
+    "metadata_name": "metadata.json",
+    "metadata_sha256": "238866824ae833787cdd462a61aff96d0c7daed92216b2253ef43b585db48709",
+    "query": {
+      "where": "received_dttm >= '2025-03-10T08:00:00.000' AND received_dttm < '2025-03-11T13:00:00.000'",
+      "order": "received_dttm, rowid",
+      "limit": 50000,
+      "note": "The frozen development slice was captured before the seven-day roster calibration slice was available. Re-fetch a wider slice for a release-grade roster."
+    },
+    "observed_received_range": {
+      "min": "2025-03-10T08:00:30.000",
+      "max": "2025-03-11T12:58:56.000"
+    },
+    "observed_data_as_of_values": [
+      "2025-03-11T03:31:55.000",
+      "2025-03-12T03:32:03.000",
+      "2025-03-13T03:27:18.000"
+    ]
+  },
+  "calibration_freeze": {
+    "purpose": "release-grade roster and empirical dynamics calibration",
+    "fetched_at_utc": "2026-08-22T11:57:31Z",
+    "source_csv_name": "raw-response-slice.csv",
+    "source_csv_sha256": "7e6cd09f650a9f7fdb3c8f8cf1577ec066bb8280d7dbf7bd36137f3675283325",
+    "source_csv_bytes": 3344761,
+    "source_csv_data_rows": 7183,
+    "source_csv_fields": 36,
+    "schema_sha256": "b5c88a74a5bbedbce283120b5921dbd5ceb4c81a626d2f6e62b291a03360d06d",
+    "metadata_name": "metadata.json",
+    "metadata_sha256": "61c4c35f07385fff55e8b5c2fc1f3f0b19b03ee8af9b2c2474951025daec4380",
+    "query": {
+      "where": "received_dttm >= '2025-03-04T09:00:00.000' AND received_dttm < '2025-03-11T13:00:00.000'",
+      "order": "received_dttm, rowid",
+      "limit": 50000
+    },
+    "observed_received_range": {
+      "min": "2025-03-04T09:02:38.000",
+      "max": "2025-03-11T12:58:56.000"
+    },
+    "observed_data_as_of_values": [
+      "2025-03-05T03:19:21.000",
+      "2025-03-06T03:28:02.000",
+      "2025-03-07T03:29:40.000",
+      "2025-03-08T03:31:32.000",
+      "2025-03-09T03:36:54.000",
+      "2025-03-10T03:30:48.000",
+      "2025-03-11T03:31:55.000",
+      "2025-03-12T03:32:03.000",
+      "2025-03-13T03:27:18.000"
+    ],
+    "history_window": {
+      "start": "2025-03-04T10:00:00",
+      "end_exclusive": "2025-03-11T10:00:00",
+      "complete": true
+    }
+  },
+  "scenario": {
+    "scenario_id": "sffd-rolling-surge-01",
+    "scenario_schema_version": "sffd-ems-scenario.v1",
+    "simulator_version": "sffd-ems-simulator/0.1.0",
+    "seed": 20250311,
+    "scenario_path": "tasks/sffd-rolling-surge-01/scenario.json",
+    "scenario_sha256": "05af2a7faed875c7a35c1154add243fd7f212477adffa0d7239adb0cf13a63df",
+    "t0": "2025-03-11T10:00:00",
+    "arrival_window_seconds": 1200,
+    "horizon_seconds": 7200,
+    "expected_arrival_window_incidents": 16,
+    "expected_dispatchable_medical_incidents": 12,
+    "development_roster_override": false,
+    "calibration_source_sha256": "7e6cd09f650a9f7fdb3c8f8cf1577ec066bb8280d7dbf7bd36137f3675283325",
+    "calibration_sample_counts": {
+      "travel_observations": 5617,
+      "service_observations": 5595,
+      "release_observations": 5595,
+      "dispatch_delay_observations": 6978
+    },
+    "phase_definitions": {
+      "travel": "response_dttm to on_scene_dttm",
+      "service_with_transport": "on_scene_dttm to transport_dttm",
+      "release_with_transport": "transport_dttm to available_dttm, including transport-to-hospital and handoff while the unit remains occupied",
+      "service_without_transport": "on_scene_dttm to available_dttm",
+      "release_without_transport": "zero because the complete busy interval is already represented as service"
+    },
+    "data_quality": {
+      "row_count": 7183,
+      "schema_fields": 36,
+      "rowid_unique": true,
+      "received_time_monotonic": true,
+      "unique_incident_numbers": 3489,
+      "multi_row_incident_numbers": 2059,
+      "missing_rates": {
+        "call_number": 0.0,
+        "unit_id": 0.0,
+        "incident_number": 0.0,
+        "call_type": 0.0,
+        "call_date": 0.0,
+        "watch_date": 0.0,
+        "received_dttm": 0.0,
+        "entry_dttm": 0.0,
+        "dispatch_dttm": 0.0,
+        "response_dttm": 0.0284,
+        "on_scene_dttm": 0.217876,
+        "transport_dttm": 0.775024,
+        "hospital_dttm": 0.779619,
+        "call_final_disposition": 0.0,
+        "available_dttm": 0.0,
+        "address": 0.0,
+        "city": 0.001114,
+        "zipcode_of_incident": 0.002088,
+        "battalion": 0.0,
+        "station_area": 0.0,
+        "box": 0.0,
+        "original_priority": 0.01949,
+        "priority": 0.0,
+        "final_priority": 0.0,
+        "als_unit": 0.0,
+        "call_type_group": 0.026312,
+        "number_of_alarms": 0.0,
+        "unit_type": 0.0,
+        "unit_sequence_in_call_dispatch": 0.0,
+        "fire_prevention_district": 0.0,
+        "supervisor_district": 0.0,
+        "neighborhoods_analysis_boundaries": 0.0,
+        "rowid": 0.0,
+        "case_location": 0.0,
+        "data_as_of": 0.0,
+        "data_loaded_at": 0.0
+      }
+    },
+    "excluded_incidents": [
+      {
+        "incident_id": "I001",
+        "source_incident_number": "25037022",
+        "reasons": ["no_complete_ems_response_chain", "no_ems_unit_response"]
+      },
+      {
+        "incident_id": "I006",
+        "source_incident_number": "25037026",
+        "reasons": ["cancelled_or_unable_to_locate", "no_complete_ems_response_chain"]
+      },
+      {
+        "incident_id": "I009",
+        "source_incident_number": "25037029",
+        "reasons": ["no_complete_ems_response_chain"]
+      },
+      {
+        "incident_id": "I015",
+        "source_incident_number": "25037034",
+        "reasons": ["no_complete_ems_response_chain", "no_ems_unit_response", "not_medical_incident"]
+      }
+    ]
+  },
+  "hidden_variants": {
+    "generator": "scripts/build_sffd_variants.py",
+    "minimum_count_before_discrimination_claim": 10,
+    "selection": "HMAC-SHA256 evaluator-keyed ranking of distinct real historical 20-minute windows",
+    "seed_derivation": "independent HMAC-SHA256 dynamics seed for each selected real window",
+    "perturbation_scope": "each variant rebuilds its real arrival stream, seven-day roster, initial occupancy, coarse geography, and empirical dynamics calibration from its own historical window",
+    "variant_source_freeze": {
+      "fetched_at_utc": "2026-08-22T15:58:33Z",
+      "source_csv_sha256": "8b837de4e9e4ab8109f53775e9c9be396fa1d6f27751a5b9fcb404a5f83a7558",
+      "source_csv_bytes": 11834751,
+      "source_csv_data_rows": 25375,
+      "source_csv_fields": 36,
+      "schema_sha256": "b5c88a74a5bbedbce283120b5921dbd5ceb4c81a626d2f6e62b291a03360d06d",
+      "metadata_sha256": "30be343df06b5751584e72447fd42cbd1c44ec6fc67122349ab0d114d4de0456",
+      "query": {
+        "where": "received_dttm >= '2025-02-15T09:00:00.000' AND received_dttm < '2025-03-12T13:00:00.000'",
+        "order": "received_dttm, rowid",
+        "page_size": 50000
+      },
+      "observed_received_range": {
+        "min": "2025-02-15T09:02:37.000",
+        "max": "2025-03-12T12:57:36.000"
+      }
+    },
+    "qualification_run": {
+      "generated_count": 10,
+      "distinct_real_windows": 10,
+      "distinct_event_stream_fingerprints": 10,
+      "minimum_gap_hours_configured": 12.0,
+      "minimum_observed_gap_hours": 13.666667,
+      "all_scenarios_loadable": true,
+      "repeat_replay_hashes_match": true,
+      "public_observation_forbidden_paths": 0,
+      "selected_windows_seeds_and_hashes_published": false
+    },
+    "committed_to_public_repository": false,
+    "agent_visible": false,
+    "qualification_note": "Generating variants is necessary but not sufficient evidence of model discrimination; frontier-agent runs are still required."
+  },
+  "field_provenance": {
+    "marker_vocabulary": [
+      "observed",
+      "derived",
+      "counterfactual"
+    ],
+    "source_fields": {
+      "call_number": {
+        "source": "observed",
+        "exposed": false
+      },
+      "unit_id": {
+        "source": "observed",
+        "exposed": true
+      },
+      "incident_number": {
+        "source": "observed",
+        "exposed": false
+      },
+      "call_type": {
+        "source": "observed",
+        "exposed": true
+      },
+      "call_date": {
+        "source": "observed",
+        "exposed": false
+      },
+      "watch_date": {
+        "source": "observed",
+        "exposed": false
+      },
+      "received_dttm": {
+        "source": "observed",
+        "exposed": true
+      },
+      "entry_dttm": {
+        "source": "observed",
+        "exposed": false
+      },
+      "dispatch_dttm": {
+        "source": "observed",
+        "exposed": false
+      },
+      "response_dttm": {
+        "source": "observed",
+        "exposed": false
+      },
+      "on_scene_dttm": {
+        "source": "observed",
+        "exposed": false
+      },
+      "transport_dttm": {
+        "source": "observed",
+        "exposed": false
+      },
+      "hospital_dttm": {
+        "source": "observed",
+        "exposed": false
+      },
+      "call_final_disposition": {
+        "source": "observed",
+        "exposed": false
+      },
+      "available_dttm": {
+        "source": "observed",
+        "exposed": false
+      },
+      "address": {
+        "source": "observed",
+        "exposed": false
+      },
+      "city": {
+        "source": "observed",
+        "exposed": false
+      },
+      "zipcode_of_incident": {
+        "source": "observed",
+        "exposed": false
+      },
+      "battalion": {
+        "source": "observed",
+        "exposed": true
+      },
+      "station_area": {
+        "source": "observed",
+        "exposed": true
+      },
+      "box": {
+        "source": "observed",
+        "exposed": false
+      },
+      "original_priority": {
+        "source": "observed",
+        "exposed": true
+      },
+      "priority": {
+        "source": "observed",
+        "exposed": true
+      },
+      "final_priority": {
+        "source": "observed",
+        "exposed": false
+      },
+      "als_unit": {
+        "source": "observed",
+        "exposed": false
+      },
+      "call_type_group": {
+        "source": "observed",
+        "exposed": false
+      },
+      "number_of_alarms": {
+        "source": "observed",
+        "exposed": false
+      },
+      "unit_type": {
+        "source": "observed",
+        "exposed": true
+      },
+      "unit_sequence_in_call_dispatch": {
+        "source": "observed",
+        "exposed": false
+      },
+      "fire_prevention_district": {
+        "source": "observed",
+        "exposed": false
+      },
+      "supervisor_district": {
+        "source": "observed",
+        "exposed": false
+      },
+      "neighborhoods_analysis_boundaries": {
+        "source": "observed",
+        "exposed": false
+      },
+      "rowid": {
+        "source": "observed",
+        "exposed": false
+      },
+      "case_location": {
+        "source": "observed",
+        "exposed": false
+      },
+      "data_as_of": {
+        "source": "observed",
+        "exposed": false
+      },
+      "data_loaded_at": {
+        "source": "observed",
+        "exposed": false
+      }
+    },
+    "scenario_fields": {
+      "schema_version": {
+        "source": "derived",
+        "exposed": true
+      },
+      "scenario_id": {
+        "source": "derived",
+        "exposed": false
+      },
+      "seed": {
+        "source": "derived",
+        "exposed": false
+      },
+      "clock": {
+        "source": "derived",
+        "exposed": true
+      },
+      "zones": {
+        "source": "derived",
+        "exposed": true
+      },
+      "units": {
+        "source": "derived",
+        "exposed": true
+      },
+      "incidents.arrival_s": {
+        "source": "observed",
+        "exposed": true
+      },
+      "incidents.call_type": {
+        "source": "observed",
+        "exposed": true
+      },
+      "incidents.priority_raw": {
+        "source": "observed",
+        "exposed": true
+      },
+      "incidents.source_incident_number": {
+        "source": "observed",
+        "exposed": false
+      },
+      "incidents.source_rowids": {
+        "source": "observed",
+        "exposed": false
+      },
+      "incidents.priority": {
+        "source": "derived",
+        "exposed": true
+      },
+      "incidents.requires_als": {
+        "source": "derived",
+        "exposed": true
+      },
+      "incidents.zone": {
+        "source": "derived",
+        "exposed": true
+      },
+      "incidents.dispatchable": {
+        "source": "derived",
+        "exposed": true
+      },
+      "background_events": {
+        "source": "observed",
+        "exposed": false
+      },
+      "calibration": {
+        "source": "derived",
+        "exposed": false
+      },
+      "hidden_reference_responses": {
+        "source": "observed",
+        "exposed": false
+      },
+      "metadata": {
+        "source": "derived",
+        "exposed": false
+      },
+      "agent_actions": {
+        "source": "counterfactual",
+        "exposed": false
+      },
+      "state_transitions": {
+        "source": "counterfactual",
+        "exposed": false
+      },
+      "score": {
+        "source": "counterfactual",
+        "exposed": false
+      }
+    },
+    "observed": [
+      "call_number",
+      "unit_id",
+      "incident_number",
+      "call_type",
+      "call_date",
+      "watch_date",
+      "received_dttm",
+      "entry_dttm",
+      "dispatch_dttm",
+      "response_dttm",
+      "on_scene_dttm",
+      "transport_dttm",
+      "hospital_dttm",
+      "call_final_disposition",
+      "available_dttm",
+      "battalion",
+      "station_area",
+      "box",
+      "original_priority",
+      "priority",
+      "final_priority",
+      "als_unit",
+      "call_type_group",
+      "number_of_alarms",
+      "unit_type",
+      "unit_sequence_in_call_dispatch",
+      "fire_prevention_district",
+      "supervisor_district",
+      "neighborhoods_analysis_boundaries",
+      "rowid",
+      "data_as_of",
+      "data_loaded_at"
+    ],
+    "derived": [
+      "coarse battalion/station_area zone IDs",
+      "normalized priority",
+      "dispatchable medical incident filter",
+      "requires_als policy (priority 1)",
+      "seven-day roster and initial BUSY/FREE status",
+      "unit mode zone",
+      "empirical travel, dispatch-delay, and service-time summaries",
+      "stable seed-based roster ranking"
+    ],
+    "counterfactual": [
+      "agent dispatch/reassign/reposition actions",
+      "hidden future event observations",
+      "state transitions under alternate actions",
+      "deterministic replay and score"
+    ],
+    "excluded_from_scenario_for_privacy": [
+      "address",
+      "city",
+      "zipcode_of_incident",
+      "case_location"
+    ]
+  },
+  "validation": {
+    "rowid_unique": true,
+    "csv_row_widths_consistent": true,
+    "required_fields_present": true,
+    "exact_addresses_not_emitted": true,
+    "coordinates_not_emitted": true,
+    "raw_csv_committed_to_repository": false,
+    "generator": "scripts/build_sffd_scenario.py",
+    "fetcher": "scripts/fetch_sffd_slice.py",
+    "hidden_variant_generator": "scripts/build_sffd_variants.py",
+    "final_test_suite": {
+      "passed": 62,
+      "failed": 0,
+      "includes_twenty_run_replay": true,
+      "includes_tamper_divergence": true,
+      "includes_hidden_state_regressions": true
+    },
+    "authoritative_baseline_overall": {
+      "no-op": 0.05,
+      "random-feasible": 0.198002,
+      "nearest-unit": 0.330338,
+      "priority-nearest": 0.330338,
+      "rolling-horizon": 0.219143
+    },
+    "provisional_numeric_acceptance": {
+      "all_targets_met": false,
+      "passed_targets": 4,
+      "total_targets": 5,
+      "unmet_target": "rolling-horizon >= 0.90",
+      "frontier_agent_evaluation_complete": false
+    },
+    "podman_compose_smoke": {
+      "agent_sidecar_started": true,
+      "separate_verifier_started": true,
+      "sidecar_source_artifacts_read_only": true,
+      "replay_ok": true,
+      "reward_schema_ok": true,
+      "details_redaction_ok": true,
+      "official_harbor_runner_validated": false
+    }
+  },
+  "reproduction": {
+    "fetch_command_template": "python3 scripts/fetch_sffd_slice.py --start 2025-03-04T09:00:00 --end 2025-03-11T13:00:00 --output-dir /private/tmp/abench-sffd-calibration --allow-extra-fields",
+    "build_command_template": "python3 scripts/build_sffd_scenario.py --csv /private/tmp/abench-sffd-calibration/raw-response-slice.csv --output tasks/sffd-rolling-surge-01/scenario.json --t0 2025-03-11T10:00:00 --arrival-window-seconds 1200 --horizon-seconds 7200 --expected-dispatchable-incidents 12 --roster-days 7 --roster-size 12 --min-calibration-observations 5 --seed 20250311 --scenario-id sffd-rolling-surge-01",
+    "development_fixture_command": "python3 scripts/build_sffd_scenario.py --csv /private/tmp/abench-sffd-v0/raw-response-slice.csv --output /private/tmp/abench-sffd-v0/scenario.json --allow-short-roster-history",
+    "hidden_variant_fetch_command_template": "python3 scripts/fetch_sffd_slice.py --start 2025-02-15T09:00:00 --end 2025-03-12T13:00:00 --output-dir EVALUATOR_PRIVATE_DIR --allow-extra-fields",
+    "hidden_variant_build_command_template": "python3 scripts/build_sffd_variants.py --csv EVALUATOR_PRIVATE_DIR/raw-response-slice.csv --output-dir EVALUATOR_PRIVATE_OUTPUT --count 10 --minimum-gap-hours 12 --key-file EVALUATOR_PRIVATE_KEY",
+    "determinism_note": "scenario metadata.generated_at defaults to max(data_as_of) from the frozen CSV; pass --generated-at only when an audited override is required"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "contract_version": "emsctl-json.v1",
+  "transport": "process-stdio-json",
+  "sidecar_transport": {
+    "kind": "unix-stream-jsonl",
+    "socket_env": "EMS_SOCKET",
+    "request_framing": "one UTF-8 JSON object followed by LF",
+    "response_framing": "one UTF-8 JSON object followed by LF"
+  },
+  "commands": {
+    "observe": {"arguments": {}},
+    "dispatch": {"arguments": ["incident", "unit", "state-version", "action-id"]},
+    "reassign": {"arguments": ["incident", "from", "to", "state-version", "action-id"]},
+    "reposition": {"arguments": ["unit", "zone", "state-version", "action-id"]},
+    "advance": {"arguments": ["next-event", "state-version", "action-id"]},
+    "finish": {"arguments": ["reason", "state-version", "action-id"]}
+  },
+  "observation": {
+    "required": [
+      "sim_time",
+      "state_version",
+      "public_state_hash",
+      "units",
+      "incidents",
+      "notifications"
+    ],
+    "unit_fields": [
+      "unit_id",
+      "unit_type",
+      "als",
+      "zone",
+      "status",
+      "incident_id",
+      "controllable"
+    ],
+    "incident_fields": [
+      "incident_id",
+      "arrival_s",
+      "call_type",
+      "priority",
+      "priority_rank",
+      "requires_als",
+      "zone",
+      "dispatchable",
+      "status",
+      "assigned_unit_id",
+      "discovered_s",
+      "dispatch_s",
+      "on_scene_s",
+      "completion_s",
+      "response_time_s",
+      "background"
+    ],
+    "never_contains": [
+      "future_events",
+      "future_incidents",
+      "release_time",
+      "available_time",
+      "seed",
+      "rng",
+      "oracle",
+      "verifier",
+      "latent",
+      "source_rowids",
+      "hidden_reference_responses",
+      "scenario_id",
+      "state_hash"
+    ]
+  },
+  "isolation": {
+    "scenario_material": "simulator-and-verifier-only",
+    "agent_access": "emsctl contract only; no scenario mount",
+    "agent_image": "non-root and excludes scenario.json, tests, and verifier",
+    "scenario_mount": "read-only simulator-sidecar mount",
+    "verifier_start": "after-agent-stop"
+  }
+}

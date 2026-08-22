@@ -1,0 +1,12 @@
+tests/
+solution/
+data_manifest.json
+instruction.md
+scenario.json
+raw-response-slice.csv
+metadata.json
+fetch_manifest.json
+*.pyc
+__pycache__/
+.ems-state/
+*.jsonl

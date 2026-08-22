@@ -1,0 +1,58 @@
+schema_version = "1.4"
+
+# Harbor transfers these files only after the Agent stops when the verifier
+# runs in a separate environment.  The simulator service remains the source
+# of hidden scenario/code material; the Agent never receives these paths.
+artifacts = [
+  "/logs/agent/actions.jsonl",
+  { source = "/opt/sffd-sidecar/scenario.json", service = "simulator" },
+  { source = "/opt/sffd-sidecar/simulator/simulator.py", service = "simulator" },
+  { source = "/opt/sffd-sidecar/simulator/__init__.py", service = "simulator" },
+  { source = "/tmp/ems-state/actions.jsonl", service = "simulator" },
+  { source = "/tmp/ems-state/event_log.jsonl", service = "simulator" },
+  { source = "/tmp/ems-state/state_hashes.jsonl", service = "simulator" },
+  { source = "/tmp/ems-state/replay_manifest.json", service = "simulator" },
+  { source = "/tmp/ems-state/rng_manifest.json", service = "simulator" },
+  { source = "/tmp/ems-state/checkpoint.json", service = "simulator" },
+]
+
+[task]
+name = "sffd-rolling-surge-01"
+version = "1.0.0"
+description = "Allocate a constrained EMS fleet over a replayable SFFD-grounded incident surge."
+
+[metadata]
+author_name = "abench"
+difficulty = "hard"
+category = "operations"
+tags = ["ems", "dispatch", "continuous-decision", "replayable"]
+
+[environment]
+network_mode = "no-network"
+build_timeout_sec = 600.0
+cpus = 1
+memory_mb = 2048
+storage_mb = 10240
+# Local/CI sidecar wiring is in environment/docker-compose.yaml.  The Agent
+# image itself contains no scenario; Harbor runners mount it only in the
+# simulator sidecar.
+
+[agent]
+user = "agent"
+timeout_sec = 900
+
+[verifier]
+# Sidecar artifacts may retain the simulator's private owner/mode bits when
+# Harbor rematerializes them.  The verifier is a trusted, separate container;
+# running it as root avoids making artifact readability depend on UID
+# coincidence across two independently built images.
+user = "root"
+timeout_sec = 300
+environment_mode = "separate"
+
+[verifier.environment]
+network_mode = "no-network"
+build_timeout_sec = 600.0
+cpus = 1
+memory_mb = 2048
+storage_mb = 10240

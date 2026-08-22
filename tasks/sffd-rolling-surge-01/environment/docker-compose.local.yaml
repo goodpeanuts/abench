@@ -1,0 +1,8 @@
+services:
+  # Harbor injects this build definition for normal trials.  The local
+  # override exists only so developers can exercise the same sidecar wiring
+  # with an ordinary Compose implementation.
+  main:
+    build:
+      context: .
+      dockerfile: Dockerfile

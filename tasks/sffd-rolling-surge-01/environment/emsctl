@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""Small JSON CLI for the SFFD simulator.
+
+The command is intentionally dependency-free and process-safe enough for the
+Harbor sidecar.  Each invocation loads ``checkpoint.json`` from the state
+directory, applies one command, writes the checkpoint/logs, and emits exactly
+one JSON object to stdout.  The simulator's private scenario and latent state
+are never included in that object.
+
+Examples::
+
+    emsctl --scenario scenario.json --state-dir /tmp/ems-state observe
+    emsctl --scenario scenario.json --state-dir /tmp/ems-state dispatch \
+      --unit M1 --incident I1 --state-version 0 --action-id a1
+    emsctl --scenario scenario.json --state-dir /tmp/ems-state advance \
+      --next-event --action-id a2
+
+An equivalent JSON command can be supplied with ``--json`` or on stdin when
+the subcommand is omitted.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import pathlib
+import socket
+import sys
+
+
+def _package_root() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parent
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="emsctl")
+    parser.add_argument("--scenario", default=os.environ.get("EMS_SCENARIO", "scenario.json"),
+                        help="scenario.json path")
+    parser.add_argument("--state-dir", default=os.environ.get("EMS_STATE_DIR", ".ems-state"),
+                        help="persistent simulator state directory")
+    parser.add_argument("--json", dest="json_command", help="JSON command object")
+    parser.add_argument("--fresh", action="store_true", help="discard an existing checkpoint")
+    parser.add_argument("command", nargs="?", help="observe, dispatch, reassign, reposition, advance, finish")
+    parser.add_argument("args", nargs=argparse.REMAINDER)
+    return parser
+
+
+def _parse_command(args: argparse.Namespace) -> dict:
+    if args.json_command:
+        value = json.loads(args.json_command)
+        if not isinstance(value, dict):
+            raise ValueError("--json must contain an object")
+        return value
+    if not args.command:
+        data = sys.stdin.read().strip()
+        if not data:
+            raise ValueError("a command or JSON on stdin is required")
+        value = json.loads(data)
+        if not isinstance(value, dict):
+            raise ValueError("stdin JSON must contain an object")
+        return value
+
+    command = args.command.lower().replace("_", "-")
+    tokens = list(args.args)
+    result = {"command": command}
+
+    # Parse the intentionally small flag vocabulary without pulling in a
+    # second parser.  Both --foo value and --foo=value are accepted.
+    i = 0
+    positional = []
+    while i < len(tokens):
+        token = tokens[i]
+        if not token.startswith("--"):
+            positional.append(token)
+            i += 1
+            continue
+        key_value = token[2:].split("=", 1)
+        key = key_value[0].replace("-", "_")
+        if len(key_value) == 2:
+            value = key_value[1]
+            i += 1
+        elif i + 1 < len(tokens) and not tokens[i + 1].startswith("--"):
+            value = tokens[i + 1]
+            i += 2
+        else:
+            value = True
+            i += 1
+        result[key] = value
+
+    if command == "dispatch":
+        if positional:
+            result.setdefault("unit_id", positional[0])
+        if len(positional) > 1:
+            result.setdefault("incident_id", positional[1])
+    elif command == "reassign":
+        if positional:
+            result.setdefault("incident_id", positional[0])
+        if len(positional) > 1:
+            result.setdefault("from_unit", positional[1])
+        if len(positional) > 2:
+            result.setdefault("to_unit", positional[2])
+    elif command == "reposition":
+        if positional:
+            result.setdefault("unit_id", positional[0])
+        if len(positional) > 1:
+            result.setdefault("zone_id", positional[1])
+    elif command == "finish" and positional:
+        result.setdefault("reason", " ".join(positional))
+    return result
+
+
+def _sidecar_request(socket_path: str, command: dict) -> dict:
+    """Send one command to the private simulator sidecar.
+
+    The client never receives a scenario path or a private checkpoint.  A
+    short timeout turns a dead sidecar into a structured tool error instead of
+    hanging the Agent indefinitely.
+    """
+
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+        channel.settimeout(float(os.environ.get("EMS_SOCKET_TIMEOUT", "10")))
+        channel.connect(socket_path)
+        channel.sendall(json.dumps(command, ensure_ascii=True,
+                                   separators=(",", ":")).encode("utf-8") + b"\n")
+        buffer = bytearray()
+        while b"\n" not in buffer:
+            chunk = channel.recv(65536)
+            if not chunk:
+                break
+            buffer.extend(chunk)
+        if not buffer:
+            raise OSError("simulator sidecar closed the connection without a response")
+        line = bytes(buffer).split(b"\n", 1)[0]
+        value = json.loads(line.decode("utf-8"))
+        if not isinstance(value, dict):
+            raise ValueError("simulator sidecar returned a non-object")
+        return value
+
+
+def _append_agent_action_log(command: dict, response: dict) -> None:
+    """Best-effort local trajectory mirror for Harbor/ATIF collection.
+
+    The simulator sidecar's append-only log is authoritative for scoring.  A
+    client-side mirror is still useful when Harbor captures only the Agent
+    filesystem or when developing without compose.  It contains the public
+    command/response envelope only, and any logging failure is deliberately
+    ignored so a read-only Agent filesystem cannot change CLI semantics.
+    """
+
+    path_text = os.environ.get("EMS_ACTION_LOG", "/logs/agent/actions.jsonl").strip()
+    if not path_text:
+        return
+    try:
+        path = pathlib.Path(path_text)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        record = {
+            "record_type": "agent_tool_call",
+            "action": command.get("command", command.get("action", "")),
+            "args": {key: value for key, value in command.items()
+                     if key not in {"command", "action"}},
+            "action_id": response.get("action_id", command.get("action_id")),
+            "response": response,
+        }
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, ensure_ascii=True,
+                                     sort_keys=True, separators=(",", ":")) + "\n")
+    except (OSError, TypeError, ValueError):
+        return
+
+
+def _emit_result(command: dict, result: dict) -> int:
+    _append_agent_action_log(command, result)
+    print(json.dumps(result, ensure_ascii=True, sort_keys=True, separators=(",", ":")))
+    return 0 if result.get("ok", True) else 2
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _parser()
+    args = parser.parse_args(argv)
+    try:
+        command = _parse_command(args)
+        socket_path = os.environ.get("EMS_SOCKET")
+        locked_sidecar = os.environ.get("EMS_SIDECAR", "").strip().lower() in {"1", "true", "yes"}
+        if socket_path:
+            try:
+                if args.fresh:
+                    raise ValueError("--fresh is unavailable through the sidecar contract")
+                result = _sidecar_request(socket_path, command)
+                return _emit_result(command, result)
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                if locked_sidecar:
+                    raise OSError(f"simulator sidecar unavailable: {exc}") from exc
+                # A caller explicitly selecting EMS_SOCKET should not silently
+                # fall back to a different world; only the unlocked local CLI
+                # may continue into direct mode for development.
+                raise
+        state_dir = pathlib.Path(args.state_dir)
+        # Keep the simulator implementation out of the Agent image.  The
+        # import is reached only by the explicitly unlocked local direct mode.
+        sys.path.insert(0, str(_package_root()))
+        from simulator import Simulator  # type: ignore
+
+        if args.fresh and (state_dir / "checkpoint.json").exists():
+            # Keep deletion narrow and explicit; this is only the sidecar's
+            # own checkpoint, never a caller-selected arbitrary tree.
+            for name in ("checkpoint.json", "events.jsonl", "event_log.jsonl", "actions.jsonl",
+                         "state_hashes.jsonl", "replay_manifest.json", "rng_manifest.json"):
+                try:
+                    (state_dir / name).unlink()
+                except FileNotFoundError:
+                    pass
+        sim = Simulator(args.scenario, state_dir=state_dir, load_existing=not args.fresh)
+        if command.get("command", "").lower().replace("_", "-") in {"observe", "status"}:
+            result = sim.observe()
+            # Keep observe responses structurally consistent with step results.
+            result = {"ok": True, "command": "observe", **result}
+        else:
+            result = sim.step(command)
+        return _emit_result(command, result)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(json.dumps({"ok": False, "code": "cli_error", "error": str(exc)},
+                         ensure_ascii=True, sort_keys=True, separators=(",", ":")))
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

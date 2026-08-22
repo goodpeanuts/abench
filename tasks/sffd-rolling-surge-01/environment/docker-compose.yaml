@@ -1,0 +1,42 @@
+services:
+  # Harbor creates the main service from environment/Dockerfile and merges
+  # this override.  Keeping the service name as `main` is required for Harbor
+  # to attach the Agent-facing socket volume to the actual Agent container.
+  main:
+    depends_on:
+      simulator:
+        condition: service_healthy
+    volumes:
+      # The Agent may connect to the sidecar socket, but must not be able to
+      # unlink or replace the socket endpoint through the shared directory.
+      - ems-socket:/tmp/ems:ro
+    environment:
+      EMS_SOCKET: /tmp/ems/emsctl.sock
+      EMS_SIDECAR: "1"
+      EMS_ACTION_LOG: /logs/agent/actions.jsonl
+  simulator:
+    build:
+      context: .
+      dockerfile: simulator.Dockerfile
+    command: ["python3", "simulator_server.py", "--scenario", "/opt/sffd-sidecar/scenario.json", "--socket", "/tmp/ems/emsctl.sock"]
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      # The scenario is mounted only in the simulator container.  The
+      # absolute path is also the artifact path Harbor rematerializes in the
+      # separate verifier environment.
+      - ../scenario.json:/opt/sffd-sidecar/scenario.json:ro
+      - ems-socket:/tmp/ems
+      - simulator-state:/tmp/ems-state
+    environment:
+      EMS_STATE_DIR: /tmp/ems-state
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import os,sys; sys.exit(0 if os.path.exists('/tmp/ems/emsctl.sock') else 1)"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+volumes:
+  ems-socket:
+  simulator-state:

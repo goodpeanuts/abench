@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Downloaded SFFD material is reproducible from the official API and is kept
+# outside the repository.  Never add a raw response slice or verifier state.
+raw-response-slice.csv
+metadata.json
+fetch_manifest.json
+*.jsonl
+.ems-state/
+replay-a/
+replay-b/
+hidden-variants/
+hidden_variants_manifest.json
