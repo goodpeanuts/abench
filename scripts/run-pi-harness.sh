@@ -415,7 +415,11 @@ log "pi 结束：退出码 ${pi_rc}（主评测无墙钟超时）"
 if [[ "$pi_rc" -ne 0 ]]; then
   verdict="pi_exit_error"
 else
-  verdict="$(classify_event_file "$events_file")" || verdict="no_agent_end"
+  # Keep event classification in an explicit branch.  This makes a classifier
+  # failure observable without allowing shell parsing of any diagnostic text.
+  if ! verdict="$(classify_event_file "$events_file")"; then
+    verdict="no_agent_end"
+  fi
 fi
 
 # ---------- 8. 收集 sidecar 状态 ----------
