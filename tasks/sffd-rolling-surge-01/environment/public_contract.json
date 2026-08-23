@@ -1,5 +1,5 @@
 {
-  "contract_version": "emsctl-json.v1",
+  "contract_version": "emsctl-json.v2",
   "transport": "process-stdio-json",
   "sidecar_transport": {
     "kind": "unix-stream-jsonl",
@@ -20,6 +20,10 @@
       "sim_time",
       "state_version",
       "public_state_hash",
+      "horizon_seconds",
+      "done",
+      "finished",
+      "finish_reason",
       "units",
       "incidents",
       "notifications"
@@ -73,5 +77,21 @@
     "agent_image": "non-root and excludes scenario.json, tests, and verifier",
     "scenario_mount": "read-only simulator-sidecar mount",
     "verifier_start": "after-agent-stop"
+  },
+  "episode_semantics": {
+    "done": "true once sim_time reaches horizon_seconds or no scheduled events remain; further advance calls are idempotent no-ops",
+    "finished": "true only after an accepted finish; finish implies done",
+    "completion_requires_advance": true,
+    "unit_release": "units return to AVAILABLE only when advance processes their service_complete/unit_release event; there is no automatic release",
+    "after_finish": {
+      "writes": "rejected",
+      "advance": "rejected",
+      "in_flight_units": "frozen in EN_ROUTE/ON_SCENE/SERVICING; their incidents never complete",
+      "queued_incidents": "become UNSERVED"
+    },
+    "status_values": {
+      "unit": ["AVAILABLE", "BUSY", "EN_ROUTE", "ON_SCENE", "SERVICING", "REPOSITIONING", "CLEARING"],
+      "incident": ["QUEUED", "UNASSIGNED", "EN_ROUTE", "ON_SCENE", "SERVICING", "COMPLETED", "UNSERVED", "BACKGROUND"]
+    }
   }
 }

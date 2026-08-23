@@ -30,7 +30,7 @@ emsctl reassign --incident INCIDENT_ID --from UNIT_ID --to UNIT_ID \
 emsctl reposition --unit UNIT_ID --zone ZONE \
   --state-version STATE_VERSION --action-id ACTION_ID
 emsctl advance --next-event
-emsctl finish --reason "all feasible work complete"
+emsctl finish --reason "no remaining work"
 ```
 
 `emsctl` is the only environment surface available to the Agent.  In Harbor
@@ -43,7 +43,35 @@ Only currently observed incidents and available units may be used.  The
 simulator rejects a stale state version, a conflicting reuse of an action id,
 an unknown object, a busy unit, or a capability-incompatible assignment without
 changing state.  Retrying the identical action id is idempotent.
-Continue advancing until the horizon or finish when no useful action remains.
+Continue advancing until the horizon (`done` is true).  Call `finish` only
+under the episode-end rules below.
+
+## Episode end and completion
+
+- A completion is produced only when `advance` processes a unit's scheduled
+  service-completion event.  There is no timer and no automatic release: a
+  unit that is EN_ROUTE, ON_SCENE, or SERVICING in your latest observation
+  stays in that status until you `advance` past its completion event.
+- Every observation carries `horizon_seconds`, `done`, `finished`, and
+  `finish_reason`.  `done` is true once logical time reaches the horizon or no
+  scheduled events remain; further `advance` calls are then idempotent
+  no-ops.  `finished` is true only after an accepted `finish`, which records
+  your `--reason` in `finish_reason`.
+- Unit statuses are AVAILABLE, BUSY (occupied before the slice starts;
+  released by a scheduled event, not by anything you do), EN_ROUTE, ON_SCENE,
+  SERVICING, REPOSITIONING, and CLEARING (briefly occupied after a service
+  completes).  Incident statuses are QUEUED, UNASSIGNED, EN_ROUTE, ON_SCENE,
+  SERVICING, COMPLETED, UNSERVED, and BACKGROUND.  These are the complete
+  enumerations: there are no hidden intermediate states, no automatic release
+  timer, and no field beyond the ones each observation prints.
+- After `finish`, every write command and every `advance` is rejected.
+  QUEUED/UNASSIGNED incidents are marked UNSERVED, and units that are
+  EN_ROUTE, ON_SCENE, or SERVICING are frozen: their incidents never complete
+  and score no coverage.
+- Therefore keep advancing while any dispatchable incident is unserved or any
+  controllable unit is in transit or on scene.  Call `finish` only when no
+  useful work of any kind remains; an early `finish` forfeits every in-flight
+  response.
 
 ## What is scored
 

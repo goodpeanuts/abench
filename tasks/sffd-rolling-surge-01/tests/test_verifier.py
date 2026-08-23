@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 
 from verifier_lib import (
+    RESPONSE_QUALITY_POWER,
+    VERIFIER_VERSION,
     _public_integrity,
     audit_actions,
     canonical_json,
@@ -17,12 +19,14 @@ from verifier_lib import (
     replay_actions,
     sha256_json,
 )
-from score import main as score_main
+from score import REWARD_KEYS as SCORE_REWARD_KEYS, main as score_main
 
 
 REWARD_KEYS = {
     "response", "coverage", "safety", "adaptation", "efficiency",
     "integrity", "overall", "strict_pass",
+    "response_linear", "safety_ungated", "adaptation_ungated",
+    "efficiency_ungated", "overall_reference", "completion_rate",
 }
 
 
@@ -404,6 +408,87 @@ class VerifierTests(unittest.TestCase):
             "integrity": 0.05,
         }.items())
         self.assertAlmostEqual(result["overall"], round(expected, 6))
+
+    def test_reference_track_bounds(self) -> None:
+        # q in [0, 1] implies q >= q^2, and the multiplicative service gate is
+        # also in [0, 1], so every reference (unsquared, ungated) value must
+        # dominate its official counterpart.  The invariant guards against the
+        # two tracks ever being wired to each other's accumulators.
+        scenario = scenario_fixture()
+        actions = [
+            {"action": "dispatch", "args": {"incident_id": "I1", "unit_id": "M1", "state_version": 0, "action_id": "a1"}},
+            {"action": "advance", "args": {"action_id": "a2"}},
+            {"action": "dispatch", "args": {"incident_id": "I2", "unit_id": "B1", "state_version": 1, "action_id": "a3"}},
+        ]
+        trace = {"events": [
+            {"event": "incident_arrival", "incident_id": "I1", "time": 0},
+            {"event": "unit_on_scene", "incident_id": "I1", "unit_id": "M1", "time": 300},
+            {"event": "incident_complete", "incident_id": "I1", "time": 600},
+            {"event": "incident_arrival", "incident_id": "I2", "time": 120},
+            {"event": "unit_on_scene", "incident_id": "I2", "unit_id": "B1", "time": 300},
+            {"event": "incident_complete", "incident_id": "I2", "time": 480},
+        ]}
+        result = compute_score(scenario, actions, trace, {"ok": True, "simulator_available": False, "state_hash": "x"})
+        self.assertEqual(RESPONSE_QUALITY_POWER, 2)
+        self.assertGreaterEqual(result["response_linear"], result["response"])
+        self.assertGreaterEqual(result["safety_ungated"], result["safety"])
+        self.assertGreaterEqual(result["adaptation_ungated"], result["adaptation"])
+        self.assertGreaterEqual(result["efficiency_ungated"], result["efficiency"])
+        self.assertGreaterEqual(result["overall_reference"], result["overall"])
+        for key in ("response_linear", "safety_ungated", "adaptation_ungated",
+                    "efficiency_ungated", "overall_reference", "completion_rate"):
+            self.assertGreaterEqual(result[key], 0.0)
+            self.assertLessEqual(result[key], 1.0)
+
+    def test_reward_schema_keeps_official_prefix(self) -> None:
+        self.assertEqual(
+            SCORE_REWARD_KEYS[:8],
+            ("response", "coverage", "safety", "adaptation", "efficiency",
+             "integrity", "overall", "strict_pass"),
+        )
+        self.assertEqual(set(SCORE_REWARD_KEYS), REWARD_KEYS)
+
+    def test_completion_rate_matches_evidence(self) -> None:
+        scenario = scenario_fixture()
+        trace = {"events": [
+            {"event": "incident_arrival", "incident_id": "I1", "time": 0},
+            {"event": "unit_on_scene", "incident_id": "I1", "unit_id": "M1", "time": 100},
+            {"event": "incident_complete", "incident_id": "I1", "time": 200},
+        ]}
+        result = compute_score(scenario, [], trace, {"ok": True})
+        evidence = result["evidence"]
+        self.assertAlmostEqual(
+            result["completion_rate"],
+            round(evidence["completed_weight"] / evidence["total_priority_weight"], 6),
+        )
+
+    def test_hard_failure_zeroes_reference_overall(self) -> None:
+        # A disqualified trajectory must not resurface through the unsquared
+        # reference view: the mirror zeroing keeps the two scales consistent.
+        scenario = scenario_fixture()
+        actions = [
+            {"action": "dispatch", "args": {"incident_id": "I1", "unit_id": "M1", "action_id": "a1"}},
+            {"action": "dispatch", "args": {"incident_id": "I2", "unit_id": "M1", "action_id": "a2"}},
+        ]
+        trace = {"actions": [{**actions[0], "ok": True}, {**actions[1], "ok": True}], "events": []}
+        result = compute_score(scenario, actions, trace, {"ok": True})
+        self.assertTrue(result["evidence"]["hard_failure"])
+        self.assertEqual(result["overall"], 0.0)
+        self.assertEqual(result["overall_reference"], 0.0)
+        self.assertEqual(result["safety_ungated"], 0.0)
+
+    def test_verifier_version_recorded_in_details(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reward_path = root / "reward.json"
+            details_path = root / "details.json"
+            self.assertEqual(score_main([
+                "--scenario", str(root / "missing.json"),
+                "--output", str(reward_path),
+                "--details-output", str(details_path),
+            ]), 2)
+            details = json.loads(details_path.read_text(encoding="utf-8"))
+            self.assertEqual(details["verifier_version"], VERIFIER_VERSION)
 
     def test_illegal_actions_and_duplicate_action_id(self) -> None:
         scenario = scenario_fixture()

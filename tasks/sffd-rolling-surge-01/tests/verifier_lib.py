@@ -30,6 +30,12 @@ WEIGHTS = {
     "integrity": 0.05,
 }
 
+# Bumped to 0.2 with the dual-scale reward schema: the official eight keys are
+# unchanged, and every run now additionally records a linear (unsquared,
+# ungated) reference track plus ``completion_rate``.  ``strict_pass`` is
+# defined here only; the simulator no longer emits a conflicting copy.
+VERIFIER_VERSION = "sffd-harbor-verifier-0.2"
+
 # A response that consumes most of its priority SLA should contribute much
 # less than a response that arrives comfortably inside the target.  Squaring
 # the bounded SLA quality makes the first task deliberately risk-sensitive:
@@ -1049,6 +1055,11 @@ def compute_score(scenario: Mapping[str, Any], actions: Sequence[Any], trace: An
         dispatchable = [row["incident"] for row in incident_rows.values() if row.get("incident", {}).get("dispatchable", True)]
     total_weight = sum(priority_weight(item.get("priority")) for item in dispatchable) or 1.0
     response_sum = 0.0
+    # Reference track accumulator: the same bounded SLA quality ``q`` kept at
+    # the first power.  Recording it here (rather than reconstructing it later
+    # from the squared value, which is impossible) keeps the linear scale a
+    # faithful, exactly-computed view of the same replay.
+    response_linear_sum = 0.0
     covered_weight = 0.0
     # ``timely_coverage`` is quality-weighted rather than a binary completion
     # count.  It gives zero credit to an unserved/late incident and partial
@@ -1086,6 +1097,7 @@ def compute_score(scenario: Mapping[str, Any], actions: Sequence[Any], trace: An
             # no continuous coverage reward.
             timely_coverage_sum += weight * response_component
         response_sum += weight * (response_component ** RESPONSE_QUALITY_POWER)
+        response_linear_sum += weight * response_component
         response_evidence.append({
             "incident_id": incident_id,
             "priority": incident.get("priority"),
@@ -1246,12 +1258,35 @@ def compute_score(scenario: Mapping[str, Any], actions: Sequence[Any], trace: An
         "efficiency": round(max(0.0, min(1.0, efficiency)), 6),
         "integrity": round(max(0.0, min(1.0, integrity_score)), 6),
     }
+    # Reference track: the same dimensions without the deliberate compression
+    # (no SLA-quality squaring, no multiplicative service gate).  It is a
+    # reporting aid for humans, not an alternative official scale — the
+    # official ``overall`` above stays the only ranked score.
+    response_linear = max(0.0, min(1.0, response_linear_sum / total_weight))
+    reference = {
+        "response_linear": round(response_linear, 6),
+        "safety_ungated": round(max(0.0, min(1.0, 0.0 if catastrophic else base_safety)), 6),
+        "adaptation_ungated": round(max(0.0, min(1.0, base_adaptation)), 6),
+        "efficiency_ungated": round(max(0.0, min(1.0, base_efficiency)), 6),
+        "overall_reference": round(max(0.0, min(1.0, (
+            WEIGHTS["response"] * response_linear
+            + WEIGHTS["coverage"] * coverage
+            + WEIGHTS["safety"] * (0.0 if catastrophic else base_safety)
+            + WEIGHTS["adaptation"] * base_adaptation
+            + WEIGHTS["efficiency"] * base_efficiency
+            + WEIGHTS["integrity"] * integrity_score
+        ))), 6),
+        "completion_rate": round(completed_weight / total_weight, 6),
+    }
     overall = sum(WEIGHTS[key] * components[key] for key in WEIGHTS)
     if hard_failure:
         # A tampered/hidden-state trajectory is not a low-quality operational
         # policy; it is an invalid submission and must not retain partial
         # response or coverage credit.
         overall = 0.0
+        # Mirror the official zeroing on the reference track so a disqualified
+        # run cannot resurface through the unsquared view.
+        reference["overall_reference"] = 0.0
     strict_pass = int(
         bool(dispatchable)
         and not catastrophic
@@ -1263,6 +1298,7 @@ def compute_score(scenario: Mapping[str, Any], actions: Sequence[Any], trace: An
     )
     return {
         **components,
+        **reference,
         "overall": round(max(0.0, min(1.0, overall)), 6),
         "strict_pass": strict_pass,
         "evidence": {
@@ -1271,6 +1307,7 @@ def compute_score(scenario: Mapping[str, Any], actions: Sequence[Any], trace: An
             "timely_coverage_weight": round(timely_coverage_sum, 6),
             "completed_weight": round(completed_weight, 6),
             "total_priority_weight": round(total_weight, 6),
+            "completion_rate": round(completed_weight / total_weight, 6),
             "service_gate": round(service_gate, 6),
             "response_quality_power": RESPONSE_QUALITY_POWER,
             "scored_operational_attempts": len(operational_attempts),

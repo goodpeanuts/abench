@@ -31,12 +31,14 @@ if [[ -f scenario.json ]]; then
   "$PYTHON_BIN" tests/atif.py --actions "$tmp_actions" --output "$smoke_dir/trajectory.json"
   "$PYTHON_BIN" tests/score.py --scenario scenario.json --actions "$tmp_actions" \
     --output "$smoke_dir/reward.json" --details-output "$smoke_dir/details.json" >/dev/null
-  "$PYTHON_BIN" - <<'PY' "$smoke_dir/reward.json" "$smoke_dir/details.json" "$smoke_dir/trajectory.json"
+  "$PYTHON_BIN" - <<'PY' "$smoke_dir/reward.json" "$smoke_dir/details.json" "$smoke_dir/trajectory.json" "$SCRIPT_DIR"
 import json, sys
 reward = json.load(open(sys.argv[1], encoding="utf-8"))
 details = json.load(open(sys.argv[2], encoding="utf-8"))
 trajectory = json.load(open(sys.argv[3], encoding="utf-8"))
-required = {"response", "coverage", "safety", "adaptation", "efficiency", "integrity", "overall", "strict_pass"}
+sys.path.insert(0, sys.argv[4])
+from score import REWARD_KEYS
+required = set(REWARD_KEYS)
 if set(reward) != required:
     raise SystemExit(f"reward.json has unexpected keys: {sorted(set(reward) ^ required)}")
 if any(type(value) not in {int, float} for value in reward.values()):

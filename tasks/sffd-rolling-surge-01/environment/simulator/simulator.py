@@ -1723,7 +1723,12 @@ class Simulator:
         return self.run_actions(actions, reset=True)
 
     def reward(self) -> Dict[str, Any]:
-        """Compute transparent simulator-level metrics (not a clinical score)."""
+        """Compute transparent simulator-level metrics (not a clinical score).
+
+        Diagnostics only.  The pass/fail authority is
+        ``tests/verifier_lib.py::compute_score``; this method deliberately emits
+        no strict-pass bit so the two definitions cannot drift apart again.
+        """
         metrics = self.metrics()
         response = 0.0
         if metrics["mean_response_s"] is not None:
@@ -1737,11 +1742,9 @@ class Simulator:
         integrity = 1.0 if self._replay_integrity_ok() else 0.0
         overall = (0.40 * response + 0.20 * coverage + 0.15 * safety +
                    0.10 * adaptation + 0.10 * efficiency + 0.05 * integrity)
-        strict = int(bool(self.finished and integrity and metrics["invalid_actions"] == 0 and
-                          coverage >= 1.0))
         return {"response": response, "coverage": coverage, "safety": safety,
                 "adaptation": adaptation, "efficiency": efficiency,
-                "integrity": integrity, "overall": overall, "strict_pass": strict}
+                "integrity": integrity, "overall": overall}
 
     def _replay_integrity_ok(self) -> bool:
         if not self._state_hashes:

@@ -52,17 +52,16 @@ if [[ -z "$scenario" ]]; then
   # Keep infrastructure/configuration failures machine-readable.  Harbor can
   # still collect reward.json even when a provider failed to transfer an
   # artifact, and a missing scenario must never receive a positive score.
-  "$PYTHON_BIN" - "$reward" "$details" <<'PY'
+  "$PYTHON_BIN" - "$reward" "$details" "$SCRIPT_DIR" <<'PY'
 import json
 import sys
-reward_path, details_path = sys.argv[1:3]
-reward = {
-    "response": 0.0, "coverage": 0.0, "safety": 0.0,
-    "adaptation": 0.0, "efficiency": 0.0, "integrity": 0.0,
-    "overall": 0.0, "strict_pass": 0,
-}
+reward_path, details_path, script_dir = sys.argv[1:4]
+sys.path.insert(0, script_dir)
+from score import VERIFIER_VERSION, _zero_reward
+
+reward = _zero_reward()
 details = {
-    "verifier_version": "sffd-harbor-verifier-0.1",
+    "verifier_version": VERIFIER_VERSION,
     "action_count": 0,
     "reward": reward,
     "errors": ["scenario not found in verifier environment"],

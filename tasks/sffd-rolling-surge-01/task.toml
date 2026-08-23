@@ -18,7 +18,11 @@ artifacts = [
 
 [task]
 name = "sffd-rolling-surge-01"
-version = "1.0.0"
+# 1.1.0 — epoch break: the episode-end contract (finish freeze, done/finished
+# semantics, completion-requires-advance) is now documented for the agent and
+# public_contract.json is v2.  Scores from 1.0.0 runs are not comparable with
+# 1.1.0 runs; the verifier records its own version in every reward.
+version = "1.1.0"
 description = "Allocate a constrained EMS fleet over a replayable SFFD-grounded incident surge."
 
 [metadata]
@@ -39,7 +43,9 @@ storage_mb = 10240
 
 [agent]
 user = "agent"
-timeout_sec = 900
+# No task-specific Agent wall-clock timeout.  The harness waits for pi to exit;
+# simulator progress is governed by the logical episode horizon instead.  Any
+# platform default applied by Harbor is outside this task declaration.
 
 [verifier]
 # Sidecar artifacts may retain the simulator's private owner/mode bits when

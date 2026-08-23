@@ -25,6 +25,7 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from verifier_lib import (  # type: ignore
+        VERIFIER_VERSION,
         compute_score,
         load_json,
         load_jsonl,
@@ -32,9 +33,19 @@ if __package__ in {None, ""}:
         _public_integrity,
     )
 else:
-    from .verifier_lib import compute_score, load_json, load_jsonl, replay_actions, _public_integrity
+    from .verifier_lib import (
+        VERIFIER_VERSION,
+        compute_score,
+        load_json,
+        load_jsonl,
+        replay_actions,
+        _public_integrity,
+    )
 
 
+# The official eight keys keep their values and order; the six reference keys
+# (unsquared, ungated) are appended as reporting aids so no consumer ever has
+# to reconstruct a linear scale from compressed numbers.
 REWARD_KEYS = (
     "response",
     "coverage",
@@ -44,6 +55,12 @@ REWARD_KEYS = (
     "integrity",
     "overall",
     "strict_pass",
+    "response_linear",
+    "safety_ungated",
+    "adaptation_ungated",
+    "efficiency_ungated",
+    "overall_reference",
+    "completion_rate",
 )
 
 
@@ -148,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.scenario.is_file():
         reward = _zero_reward()
         details = {
-            "verifier_version": "sffd-harbor-verifier-0.1",
+            "verifier_version": VERIFIER_VERSION,
             "action_count": 0,
             "reward": reward,
             "errors": [f"scenario not found: {args.scenario}"],
@@ -200,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     reward = _numeric_reward(result)
     errors = [error for error in (action_load_error, trace_load_error) if error]
     details: dict[str, Any] = {
-        "verifier_version": "sffd-harbor-verifier-0.1",
+        "verifier_version": VERIFIER_VERSION,
         "action_count": len(action_records),
         "reward": reward,
         "evidence": _aggregate_evidence(result.get("evidence")),
@@ -215,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     public_details = _public_integrity(details)
     if not isinstance(public_details, dict):
         public_details = {
-            "verifier_version": "sffd-harbor-verifier-0.1",
+            "verifier_version": VERIFIER_VERSION,
             "reward": reward,
             "errors": ["diagnostic redaction returned an invalid shape"],
         }
@@ -238,6 +255,12 @@ def _zero_reward() -> dict[str, float | int]:
         "integrity": 0.0,
         "overall": 0.0,
         "strict_pass": 0,
+        "response_linear": 0.0,
+        "safety_ungated": 0.0,
+        "adaptation_ungated": 0.0,
+        "efficiency_ungated": 0.0,
+        "overall_reference": 0.0,
+        "completion_rate": 0.0,
     }
 
 
@@ -275,6 +298,7 @@ def _aggregate_evidence(value: Any) -> dict[str, Any]:
         "timely_coverage_weight",
         "completed_weight",
         "total_priority_weight",
+        "completion_rate",
         "service_gate",
         "response_quality_power",
         "late_count",

@@ -216,6 +216,16 @@ class SimulatorTests(unittest.TestCase):
         })
         self.assertTrue(reused["ok"], reused)
 
+    def test_simulator_reward_has_no_strict_pass(self) -> None:
+        # The simulator-level reward is diagnostics only; the strict pass/fail
+        # authority lives exclusively in tests/verifier_lib.py.  Guard against
+        # a second, drifting definition reappearing here.
+        simulator = self.make_sim()
+        result = simulator.run_actions([
+            {"command": "observe"},
+        ])
+        self.assertNotIn("strict_pass", result["reward"])
+
     def test_replay_is_bitwise_deterministic_twenty_runs(self) -> None:
         actions = []
         for index in range(30):

@@ -24,6 +24,13 @@ const ALLOWED_SUBCOMMANDS = new Set([
 const FORBIDDEN_FLAGS = new Set(["--scenario", "--state-dir", "--json", "--fresh"]);
 const EMSCTL_TIMEOUT_MS = 120_000;
 
+function forbiddenFlagInArg(arg) {
+  for (const flag of FORBIDDEN_FLAGS) {
+    if (arg === flag || arg.startsWith(`${flag}=`)) return flag;
+  }
+  return null;
+}
+
 export default function emsctlToolExtension(pi) {
   const bridgeEnv = process.env.PI_EMSCTL_BRIDGE_ARGS || "";
   const bridgeArgs = bridgeEnv.split(",").map((part) => part.trim()).filter(Boolean);
@@ -41,13 +48,14 @@ export default function emsctlToolExtension(pi) {
     promptSnippet: "Run one emsctl subcommand against the SFFD task environment per call",
     promptGuidelines: [
       "Use emsctl as the only way to interact with the task environment; there are no file or shell tools.",
+      "Incidents complete only when advance processes their completion event; finish freezes in-flight units and rejects all later writes, so advance to done instead of finishing early.",
     ],
     parameters: Type.Object({
       args: Type.Array(Type.String(), {
         description:
           'emsctl 参数数组，第一项必须是子命令。例：["observe"]；' +
           '["dispatch","--incident","I002","--unit","AM207","--state-version","2","--action-id","d-101"]；' +
-          '["advance","--next-event"]；["finish","--reason","all feasible work complete"]',
+          '["advance","--next-event"]；["finish","--reason","no remaining work"]',
       }),
     }),
     async execute(_toolCallId, params, signal) {
@@ -62,9 +70,10 @@ export default function emsctlToolExtension(pi) {
         );
       }
       for (const arg of argv) {
-        if (FORBIDDEN_FLAGS.has(arg)) {
+        const forbidden = forbiddenFlagInArg(arg);
+        if (forbidden) {
           throw new Error(
-            `不允许的全局旗子：${arg}（--scenario/--state-dir/--json/--fresh 已被 harness 禁用）`
+            `不允许的全局旗子：${forbidden}（--scenario/--state-dir/--json/--fresh 已被 harness 禁用）`
           );
         }
       }

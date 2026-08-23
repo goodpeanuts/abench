@@ -11,10 +11,10 @@
 #
 # 用法：
 #   bash scripts/run-pi-harness.sh --provider dashscope --model qwen3.8-max
-#   常用选项：--thinking max|--task <dir>|--timeout 840|--bootstrap-only|
+#   常用选项：--thinking max|--task <dir>|--bootstrap-only|
 #             --skip-smoke|--keep
 #   非最高思考档可显式加 --allow-any-thinking；该标记只放宽档位校验，仍会评分。
-# 环境变量：PI_HARNESS_PROVIDER/MODEL/THINKING/TIMEOUT_SEC/SMOKE_TIMEOUT_SEC/
+# 环境变量：PI_HARNESS_PROVIDER/MODEL/THINKING/SMOKE_TIMEOUT_SEC/
 # TASK/PROJECT、PI_BIN。源配置只保存密钥变量名，harness 不主动序列化密钥值。
 set -euo pipefail
 
@@ -25,7 +25,6 @@ src_settings="$repo_root/config/pi/settings.json"
 provider="${PI_HARNESS_PROVIDER:-}"
 model="${PI_HARNESS_MODEL:-}"
 thinking="${PI_HARNESS_THINKING:-}"
-timeout_sec="${PI_HARNESS_TIMEOUT_SEC:-840}"
 agent_smoke_timeout_sec="${PI_HARNESS_SMOKE_TIMEOUT_SEC:-300}"
 task_rel="${PI_HARNESS_TASK:-tasks/sffd-rolling-surge-01}"
 project="${PI_HARNESS_PROJECT:-sffd-pi}"
@@ -48,7 +47,6 @@ while [[ $# -gt 0 ]]; do
     --model) [[ $# -ge 2 ]] || { echo "--model 需要一个值" >&2; exit 2; }; model="$2"; shift 2 ;;
     --thinking) [[ $# -ge 2 ]] || { echo "--thinking 需要一个值" >&2; exit 2; }; thinking="$2"; shift 2 ;;
     --task) [[ $# -ge 2 ]] || { echo "--task 需要一个值" >&2; exit 2; }; task_rel="$2"; shift 2 ;;
-    --timeout) [[ $# -ge 2 ]] || { echo "--timeout 需要一个值（秒）" >&2; exit 2; }; timeout_sec="$2"; shift 2 ;;
     --project) [[ $# -ge 2 ]] || { echo "--project 需要一个值" >&2; exit 2; }; project="$2"; shift 2 ;;
     --bootstrap-only) bootstrap_only=1; shift ;;
     --skip-smoke) skip_smoke=1; shift ;;
@@ -94,7 +92,6 @@ if [[ "$allow_any_thinking" -eq 1 ]]; then
   run_kind="diagnostic"
 fi
 
-[[ "$timeout_sec" =~ ^[1-9][0-9]*$ ]] || { echo "--timeout 必须是正整数秒" >&2; exit 2; }
 [[ "$agent_smoke_timeout_sec" =~ ^[1-9][0-9]*$ ]] || {
   echo "PI_HARNESS_SMOKE_TIMEOUT_SEC 必须是正整数秒" >&2
   exit 2
@@ -368,7 +365,7 @@ prompt_file="$run_dir/prompt.md"
 - 观察当前状态：args = ["observe"]
 - 派遣单位：args = ["dispatch","--incident","I002","--unit","AM207","--state-version","2","--action-id","d-101"]
 - 推进到下一个事件：args = ["advance","--next-event"]
-- 收尾：args = ["finish","--reason","all feasible work complete"]
+- 收尾：args = ["finish","--reason","no remaining work"]
 
 规则：
 
@@ -376,20 +373,22 @@ prompt_file="$run_dir/prompt.md"
   单位忙 / 能力不匹配）——读取错误中的 JSON 说明，改用最新的
   state_version 与全新的唯一 action_id 重试；完全相同的 action_id 重试是
   幂等的。
-- 先 observe，再按上面的任务契约行动，持续 advance 到 horizon，或在无可
-  行动作时 finish。
+- 先 observe，再按上面的任务契约行动。完成只在 advance 处理服务完成事件
+  后产生——持续推进到 done=true；仅当没有未服务的可派事故且没有在途/
+  在场单位时才 finish（finish 后所有写命令与 advance 都会被拒绝，在途
+  单位永不完成）。
 - 你没有文件读写、shell 或网络工具；请直接在对话中推理并记住状态。
-- 你的总时间预算约 ${timeout_sec} 秒；接近预算时用 finish 收尾（reason
-  自拟）。
+- 本次 harness 不设置主评测的墙钟截止时间；持续推进到 done=true 后再结束，
+  不要为了假想的本地时间预算提前 finish。
 PROMPT
 } > "$prompt_file"
 cp "$prompt_file" "$workspace/BRIDGE.md"
 
-# ---------- 6. 启动 pi（手动 watchdog） ----------
+# ---------- 6. 启动 pi（等待自然退出） ----------
 
 events_file="$run_dir/pi-events.jsonl"
 stderr_file="$run_dir/pi-stderr.log"
-log "启动 pi（单工具硬封锁）：provider=${provider} model=${model} thinking=${thinking} timeout=${timeout_sec}s"
+log "启动 pi（单工具硬封锁、无主评测超时）：provider=${provider} model=${model} thinking=${thinking}"
 
 (
   cd "$workspace"
@@ -404,42 +403,16 @@ log "启动 pi（单工具硬封锁）：provider=${provider} model=${model} thi
 pi_pid=$!
 active_pi_pid="$pi_pid"
 
-timed_out=0
 pi_rc=0
-elapsed=0
-while :; do
-  if ! kill -0 "$pi_pid" 2>/dev/null; then
-    wait "$pi_pid" || pi_rc=$?
-    break
-  fi
-  if [[ "$elapsed" -ge "$timeout_sec" ]]; then
-    log "超过 ${timeout_sec}s，终止 pi（TERM）"
-    kill "$pi_pid" 2>/dev/null || true
-    for _ in $(seq 1 5); do
-      kill -0 "$pi_pid" 2>/dev/null || break
-      sleep 1
-    done
-    kill -9 "$pi_pid" 2>/dev/null || true
-    wait "$pi_pid" 2>/dev/null || pi_rc=$?
-    timed_out=1
-    break
-  fi
-  sleep 1
-  elapsed=$((elapsed + 1))
-  if (( elapsed % 30 == 0 )); then
-    log "仍在运行（${elapsed}s/${timeout_sec}s，事件 $(wc -l < "$events_file" 2>/dev/null || echo 0) 行）"
-  fi
-done
+wait "$pi_pid" || pi_rc=$?
 active_pi_pid=""
-log "pi 结束：退出码 ${pi_rc}，超时标志 ${timed_out}"
+log "pi 结束：退出码 ${pi_rc}（主评测无墙钟超时）"
 
 # ---------- 7. 事件流判定 ----------
 # pi 的 CLI 即使最后一轮以 API 错误收场也可能以 0 退出；判定失败仍先完成
 # 状态收集、评分和 manifest，最后以非零退出码报告。
 
-if [[ "$timed_out" -eq 1 ]]; then
-  verdict="timeout"
-elif [[ "$pi_rc" -ne 0 ]]; then
+if [[ "$pi_rc" -ne 0 ]]; then
   verdict="pi_exit_error"
 else
   verdict="$(classify_event_file "$events_file")" || verdict="no_agent_end"
@@ -504,15 +477,15 @@ fi
 # ---------- 10. run-manifest ----------
 
 finished_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-python3 - "$run_dir" "$task_rel" "$provider" "$model" "$thinking" "emsctl" \
-  "$pi_version" "$project" "$started_at" "$finished_at" "$timeout_sec" \
-  "$timed_out" "$pi_rc" "$verdict" "$diagnostic" "$reward_summary" <<'PY'
+python3 - "$run_dir" "$task_rel" "$task_dir" "$provider" "$model" "$thinking" "emsctl" \
+  "$pi_version" "$project" "$started_at" "$finished_at" \
+  "$pi_rc" "$verdict" "$diagnostic" "$reward_summary" <<'PY'
 import json, pathlib, sys
 
-(run_dir, task, provider, model, thinking, tools, pi_version, project,
- started, finished, timeout_sec, timed_out, pi_rc, verdict, diagnostic,
- reward_summary) = sys.argv[1:17]
+(run_dir, task, task_dir, provider, model, thinking, tools, pi_version, project,
+ started, finished, pi_rc, verdict, diagnostic, reward_summary) = sys.argv[1:16]
 root = pathlib.Path(run_dir)
+task_dir = pathlib.Path(task_dir)
 reward = None
 action_count = None
 if reward_summary != "null":
@@ -522,10 +495,114 @@ if reward_summary != "null":
         action_count = payload.get("action_count")
     except json.JSONDecodeError:
         pass
+
+
+def _load(path):
+    try:
+        return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _task_version():
+    try:
+        import tomllib
+        data = tomllib.loads((task_dir / "task.toml").read_text(encoding="utf-8"))
+        return (data.get("task") or {}).get("version")
+    except Exception:
+        return None
+
+
+def _usage_from_events(events_path):
+    # pi 在 turn_end.message.usage 上携带该回合 API 调用的用量——每回合恰
+    # 好一条，是唯一不重复的口径（message_start/message_update/message_end
+    # 会对同一次调用重复携带，流式 partial 还会出现多次）。这里聚合出过
+    # 程指标（不参与计分）：输出/思考/输入 token、最终上下文规模、回合数
+    # 与工具调用数。旧版 harness 的 manifest 无此字段，构建探索器时会用
+    # 同一逻辑从 pi-events.jsonl 回填。
+    usage = {
+        "turns": 0, "tool_calls": 0,
+        "tokens_output_total": 0, "tokens_reasoning_total": 0,
+        "tokens_input_total": 0, "context_final": None,
+    }
+    try:
+        handle = open(events_path, encoding="utf-8")
+    except OSError:
+        return usage
+    with handle:
+        for line in handle:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            kind = event.get("type")
+            if kind == "tool_execution_start":
+                usage["tool_calls"] += 1
+                continue
+            if kind != "turn_end":
+                continue
+            usage["turns"] += 1
+            message = event.get("message") if isinstance(event.get("message"), dict) else {}
+            u = message.get("usage") if isinstance(message.get("usage"), dict) else None
+            if u is None:
+                continue
+            usage["tokens_output_total"] += int(u.get("output") or 0)
+            usage["tokens_reasoning_total"] += int(u.get("reasoning") or 0)
+            input_side = int(u.get("input") or 0) + int(u.get("cacheRead") or 0) + int(u.get("cacheWrite") or 0)
+            usage["tokens_input_total"] += input_side
+            usage["context_final"] = input_side
+    return usage
+
+
+def _process_from_actions(actions_path):
+    counts = {
+        "advance_count": 0,
+        "write_count": 0,
+        "finish_count": 0,
+    }
+    try:
+        handle = open(actions_path, encoding="utf-8")
+    except OSError:
+        return counts
+    with handle:
+        for line in handle:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            command = record.get("command")
+            if not isinstance(command, dict):
+                continue
+            name = command.get("command")
+            if name == "advance":
+                counts["advance_count"] += 1
+            elif name == "finish":
+                counts["finish_count"] += 1
+            elif name in {"dispatch", "reassign", "reposition", "transfer", "assign"}:
+                counts["write_count"] += 1
+    return counts
+
+
+def _wall_clock_seconds(started, finished):
+    try:
+        from datetime import datetime
+        start_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+        finish_dt = datetime.fromisoformat(finished.replace("Z", "+00:00"))
+        return max(0.0, (finish_dt - start_dt).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
+
+details = _load(root / "verifier" / "details.json") or {}
+contract = _load(task_dir / "environment" / "public_contract.json") or {}
 state_files = sorted(p.name for p in (root / "state").glob("*")) if (root / "state").is_dir() else []
+process = _process_from_actions(root / "state" / "actions.jsonl")
 manifest = {
     "harness": "pi-host-bridge/v2",
     "task": task,
+    "task_version": _task_version(),
+    "contract_version": contract.get("contract_version"),
+    "verifier_version": details.get("verifier_version"),
     "provider": provider,
     "model": model,
     "thinking": thinking,
@@ -534,13 +611,18 @@ manifest = {
     "compose_project": project,
     "started_at": started,
     "finished_at": finished,
-    "timeout_budget_sec": int(timeout_sec),
-    "timed_out": timed_out == "1",
+    # Kept as explicit null/false fields so consumers can distinguish new
+    # unlimited runs from old manifests that carried a numeric budget.
+    "timeout_budget_sec": None,
+    "timed_out": False,
     "pi_exit_code": int(pi_rc),
     "verdict": verdict,
     "diagnostic": diagnostic == "1",
     "reward": reward,
     "action_count": action_count,
+    "usage": _usage_from_events(root / "pi-events.jsonl"),
+    "process": process,
+    "wall_clock_seconds": _wall_clock_seconds(started, finished),
     "state_files": state_files,
     "artifacts": {
         "pi_events": "pi-events.jsonl",
