@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "visual-check",
+  "status": "fail",
+  "visualReview": "pending",
+  "artifact": {
+    "path": "/Users/zenghao.87/repo/abench/docs/evaluation-architecture.html",
+    "sha256": "6c25c57025a920ee6cefa53c5c568b16dcd68f2349cc734ced776f17b02c0941",
+    "bytes": 681885
+  },
+  "state": {
+    "detail": "read",
+    "motion": "still"
+  },
+  "chrome": {
+    "status": "available",
+    "executable": "/Users/zenghao.87/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+  },
+  "containment": {
+    "status": "fail",
+    "viewports": []
+  },
+  "readability": {
+    "status": "fail",
+    "minimumProjectedNodeTextPx": 6,
+    "viewports": []
+  },
+  "viewerChrome": {
+    "status": "fail",
+    "viewports": []
+  },
+  "captures": {
+    "status": "fail",
+    "screenshots": [],
+    "contactSheet": null
+  },
+  "sidecars": {
+    "receipt": "evaluation-architecture.visual-check.json",
+    "contactSheet": "evaluation-architecture.visual-check.html"
+  },
+  "error": "Chrome DevTools process exit failed: Chrome closed with signal SIGTRAP\nChrome process: signal SIGTRAP.\nChrome stderr:\n[0823/091430.075997:ERROR:base/power_monitor/thermal_state_observer_mac.mm:140] ThermalStateObserverMac unable to register to power notifications. Result: 9\n[0823/091430.077948:ERROR:net/dns/dns_config_service_posix.cc:138] DNS config watch failed to start.\n[0823/091430.078319:WARNING:net/dns/dns_config_service_posix.cc:197] Failed to read DnsConfig.\n[0823/091430.079113:FATAL:base/apple/mach_port_rendezvous_mac.cc:159] Check failed: kr == KERN_SUCCESS. bootstrap_check_in org.chromium.Chromium.MachPortRendezvousServer.4715: Permission denied (1100)"
+}

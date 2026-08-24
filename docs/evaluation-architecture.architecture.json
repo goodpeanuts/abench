@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "abench 评测架构：数据构建到评分探索",
+    "output": "docs/evaluation-architecture.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "source_csv",
+      "type": "external",
+      "label": "冻结 SFFD CSV",
+      "sublabel": "观测响应记录",
+      "pos": [20, 220],
+      "size": [140, 64]
+    },
+    {
+      "id": "scenario_builder",
+      "type": "backend",
+      "label": "build_sffd_scenario.py",
+      "sublabel": "校验、聚合、校准",
+      "pos": [190, 220],
+      "size": [160, 64]
+    },
+    {
+      "id": "variant_builder",
+      "type": "security",
+      "label": "build_sffd_variants.py",
+      "sublabel": "隐藏真实窗口变体",
+      "pos": [380, 80],
+      "size": [160, 64]
+    },
+    {
+      "id": "task_package",
+      "type": "cloud",
+      "label": "任务包",
+      "sublabel": "任务契约",
+      "pos": [380, 370],
+      "size": [160, 64]
+    },
+    {
+      "id": "model_api",
+      "type": "external",
+      "label": "模型 API",
+      "sublabel": "provider / thinking 最高档",
+      "pos": [570, 40],
+      "size": [160, 64]
+    },
+    {
+      "id": "pi_harness",
+      "type": "backend",
+      "label": "run-pi-harness.sh",
+      "sublabel": "宿主机 orchestration",
+      "pos": [570, 220],
+      "size": [160, 64]
+    },
+    {
+      "id": "emsctl_bridge",
+      "type": "security",
+      "label": "唯一工具 emsctl",
+      "sublabel": "固定 argv，白名单命令",
+      "pos": [760, 220],
+      "size": [160, 64]
+    },
+    {
+      "id": "main_container",
+      "type": "backend",
+      "label": "main 容器",
+      "sublabel": "agent-facing emsctl",
+      "pos": [950, 220],
+      "size": [150, 64]
+    },
+    {
+      "id": "simulator",
+      "type": "backend",
+      "label": "simulator sidecar",
+      "sublabel": "隐藏 scenario + 事件推进",
+      "pos": [950, 390],
+      "size": [150, 64]
+    },
+    {
+      "id": "action_log",
+      "type": "database",
+      "label": "actions.jsonl",
+      "sublabel": "sidecar 权威动作日志",
+      "pos": [1130, 390],
+      "size": [150, 64]
+    },
+    {
+      "id": "verifier",
+      "type": "security",
+      "label": "harbor_verify.sh",
+      "sublabel": "独立回放与评分",
+      "pos": [1130, 220],
+      "size": [150, 64]
+    },
+    {
+      "id": "explorer",
+      "type": "frontend",
+      "label": "score-explorer.html",
+      "sublabel": "官方 / 参考双口径",
+      "pos": [1130, 560],
+      "size": [160, 64]
+    }
+  ],
+  "boundaries": [
+    {"kind": "region", "label": "离线任务环境（模型不可见 scenario）", "wraps": ["task_package", "main_container", "simulator"], "pad": 24},
+    {"kind": "security-group", "label": "宿主机评测编排", "wraps": ["model_api", "pi_harness", "emsctl_bridge", "action_log", "verifier", "explorer"], "pad": 20},
+    {"kind": "security-group", "label": "评测器私有数据", "wraps": ["variant_builder", "simulator", "action_log", "verifier"], "pad": 14}
+  ],
+  "connections": [
+    {"from": "source_csv", "to": "scenario_builder", "label": "读取并校验字段", "variant": "emphasis", "labelAt": [218, 340]},
+    {"from": "scenario_builder", "to": "task_package", "label": "写出 scenario.json", "variant": "emphasis"},
+    {"from": "source_csv", "to": "variant_builder", "label": "冻结切片", "variant": "security", "route": "orthogonal-v"},
+    {"from": "variant_builder", "to": "simulator", "label": "挂载隐藏变体", "variant": "security", "fromSide": "top", "toSide": "top", "via": [[460, 20], [1120, 20], [1120, 350], [1025, 350]], "labelAt": [800, 340]},
+    {"from": "task_package", "to": "pi_harness", "label": "instruction + compose", "variant": "emphasis"},
+    {"from": "model_api", "to": "pi_harness", "label": "LLM 调用", "variant": "emphasis", "route": "orthogonal-v"},
+    {"from": "pi_harness", "to": "emsctl_bridge", "label": "唯一工具调用", "variant": "security", "labelAt": [898, 330]},
+    {"from": "emsctl_bridge", "to": "main_container", "label": "固定 argv / podman exec", "variant": "security", "labelAt": [850, 310]},
+    {"from": "main_container", "to": "simulator", "label": "Unix socket JSONL", "variant": "security", "fromSide": "bottom", "toSide": "top", "route": "straight", "labelAt": [1025, 310]},
+    {"from": "simulator", "to": "action_log", "label": "记录动作与状态", "variant": "dashed", "labelAt": [1100, 480]},
+    {"from": "action_log", "to": "verifier", "label": "评分权威输入", "variant": "emphasis"},
+    {"from": "task_package", "to": "verifier", "label": "scenario + tests", "variant": "security", "fromSide": "bottom", "toSide": "right", "via": [[460, 500], [1320, 500], [1320, 252]], "labelAt": [800, 515]},
+    {"from": "verifier", "to": "explorer", "label": "评分产物", "variant": "emphasis", "fromSide": "right", "toSide": "right", "via": [[1320, 252], [1320, 592]], "labelAt": [1260, 520]}
+  ],
+  "cards": [
+    {"dot": "cyan", "title": "数据构建", "items": ["冻结 CSV 只保留观测时间与粗粒度区域", "场景生成同时产出 roster、calibration 与 provenance", "隐藏变体由 evaluator-keyed HMAC 选择真实窗口并独立派生 seed"]},
+    {"dot": "rose", "title": "隔离边界", "items": ["模型只能调用 emsctl，不能使用文件、shell 或网络工具", "scenario.json 只读挂载到 simulator sidecar", "finish 会冻结在途单位；必须推进到 done 再收尾"]},
+    {"dot": "emerald", "title": "评分与展示", "items": ["sidecar 的 actions.jsonl 是评分权威动作日志", "harbor_verify.sh 独立回放并生成 reward.json 与 details.json", "score-explorer.html 聚合正式口径与参考口径，不混合版本或无效跑次"]}
+  ]
+}

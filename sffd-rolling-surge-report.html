@@ -1,0 +1,1558 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SFFD Rolling Surge 01 | 五模型轨迹分析报告</title>
+<style>
+  :root {
+    --ink: #182431;
+    --muted: #5f6d7a;
+    --line: #d8e0e7;
+    --paper: #ffffff;
+    --canvas: #e9edf1;
+    --navy: #152431;
+    --navy-2: #213746;
+    --red: #c74634;
+    --red-soft: #f7e3de;
+    --blue: #2d6cdf;
+    --green: #2b8a62;
+    --violet: #7657ad;
+    --orange: #b77325;
+    --cyan: #2e899a;
+    --shadow: 0 10px 30px rgba(25, 42, 56, .08);
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--canvas); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--canvas);
+    font: 13px/1.62 ui-sans-serif, system-ui, -apple-system, "PingFang SC",
+      "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  }
+  .report {
+    max-width: 1120px;
+    margin: 28px auto;
+    background: var(--paper);
+    box-shadow: var(--shadow);
+  }
+  .page {
+    padding: 42px 54px 48px;
+    page-break-after: always;
+    break-after: page;
+  }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+  .cover {
+    min-height: 985px;
+    color: #f4f7f9;
+    background:
+      linear-gradient(135deg, rgba(199,70,52,.18), transparent 42%),
+      linear-gradient(180deg, var(--navy), #10202a);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+  .cover:after {
+    content: "";
+    position: absolute;
+    right: -120px;
+    bottom: -180px;
+    width: 540px;
+    height: 540px;
+    border: 1px solid rgba(255,255,255,.13);
+    border-radius: 50%;
+    box-shadow: 0 0 0 32px rgba(255,255,255,.035), 0 0 0 64px rgba(255,255,255,.025);
+  }
+  .eyebrow, .kicker {
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    font-size: 10px;
+    font-weight: 750;
+  }
+  .eyebrow { color: #f0a293; }
+  .cover h1 {
+    max-width: 720px;
+    margin: 28px 0 20px;
+    font-size: clamp(42px, 6vw, 74px);
+    line-height: 1.06;
+    letter-spacing: 0;
+    font-weight: 780;
+  }
+  .cover .subtitle {
+    max-width: 650px;
+    color: #c8d3da;
+    font-size: 20px;
+    line-height: 1.45;
+  }
+  .cover .thesis {
+    max-width: 700px;
+    margin-top: 42px;
+    padding: 18px 22px;
+    border-left: 4px solid var(--red);
+    background: rgba(255,255,255,.075);
+    color: #f5f8fa;
+    font-size: 17px;
+  }
+  .cover-meta {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    color: #b8c7d0;
+    font-size: 12px;
+  }
+  .cover-meta strong { display: block; color: #fff; font-size: 16px; }
+  h2 {
+    margin: 0 0 18px;
+    font-size: 28px;
+    line-height: 1.2;
+    letter-spacing: 0;
+  }
+  h3 {
+    margin: 0 0 9px;
+    font-size: 16px;
+    line-height: 1.3;
+  }
+  h4 { margin: 0 0 6px; font-size: 13px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 11px; color: var(--muted); }
+  .section-lead { max-width: 760px; color: var(--muted); font-size: 15px; }
+  .rule { height: 1px; background: var(--line); margin: 22px 0; }
+  .callout {
+    padding: 14px 16px;
+    border: 1px solid #e9c3bb;
+    border-left: 4px solid var(--red);
+    background: #fff8f6;
+  }
+  .callout strong { color: #9b3528; }
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 26px 0;
+  }
+  .metric {
+    min-height: 100px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    background: #fbfcfd;
+  }
+  .metric .value {
+    display: block;
+    margin: 4px 0 2px;
+    font-size: 28px;
+    font-weight: 780;
+    line-height: 1.05;
+    letter-spacing: 0;
+  }
+  .metric .label { color: var(--muted); font-size: 11px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .panel {
+    border: 1px solid var(--line);
+    background: #fff;
+    padding: 18px;
+  }
+  .panel.soft { background: #f7f9fa; }
+  .panel.red { border-color: #edc4bc; background: #fff8f6; }
+  .panel.dark { color: #ecf3f6; border-color: #294251; background: var(--navy); }
+  .panel.dark .muted { color: #b9c8d1; }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .stat-row:last-child { border-bottom: 0; }
+  .stat-row b { font-variant-numeric: tabular-nums; }
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border: 1px solid var(--line);
+    margin: 20px 0;
+  }
+  .fact { padding: 14px 15px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .fact:nth-child(3n) { border-right: 0; }
+  .fact:nth-last-child(-n+3) { border-bottom: 0; }
+  .fact b { display: block; font-size: 24px; line-height: 1.1; }
+  .fact span { color: var(--muted); font-size: 11px; }
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    margin: 20px 0;
+  }
+  .flow-step {
+    position: relative;
+    min-height: 78px;
+    padding: 13px 16px;
+    border: 1px solid var(--line);
+    border-right: 0;
+    background: #f7f9fa;
+  }
+  .flow-step:last-child { border-right: 1px solid var(--line); }
+  .flow-step:not(:last-child):after {
+    content: ">";
+    position: absolute;
+    top: 25px;
+    right: -9px;
+    z-index: 2;
+    width: 18px;
+    height: 28px;
+    background: #fff;
+    color: var(--red);
+    text-align: center;
+    font-size: 18px;
+    font-weight: 800;
+  }
+  .flow-step b { display: block; margin-bottom: 3px; }
+  .flow-step span { color: var(--muted); font-size: 11px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 8px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-size: 11px; font-weight: 700; text-align: left; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .score-table td:first-child { font-weight: 700; }
+  .model-tag {
+    display: inline-block;
+    min-width: 8px;
+    height: 8px;
+    margin-right: 7px;
+    border-radius: 50%;
+    vertical-align: 1px;
+  }
+  .opus { background: var(--orange); }
+  .gpt { background: var(--green); }
+  .deepseek { background: var(--violet); }
+  .kimi { background: var(--blue); }
+  .qwen { background: var(--cyan); }
+  .baseline-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-right: 7px;
+    border: 1px solid #8c6828;
+    border-radius: 50%;
+    background: #e1b45b;
+    vertical-align: 1px;
+  }
+  .baseline-dot.nearest { background: #c99531; }
+  .baseline-dot.random { background: #edd49b; }
+  .baseline-dot.noop { background: #f5ead0; }
+  .baseline-row td { background: #fffaf0; }
+  .baseline-row td:first-child { font-weight: 700; }
+  .baseline-row .rank { color: #8c6828; }
+  .baseline-pill { border-color: #d7b36d; color: #805b1d; background: #fff8e8; }
+  .barline { display: flex; align-items: center; gap: 8px; }
+  .bartrack { flex: 1; min-width: 90px; height: 9px; background: #edf1f4; }
+  .barfill { height: 100%; background: var(--navy-2); }
+  .barfill.red { background: var(--red); }
+  .barfill.blue { background: var(--blue); }
+  .barfill.green { background: var(--green); }
+  .barfill.violet { background: var(--violet); }
+  .barfill.cyan { background: var(--cyan); }
+  .barfill.baseline { background: #b88422; }
+  .rank { color: var(--red); font-size: 16px; font-weight: 800; }
+  .pill {
+    display: inline-block;
+    padding: 2px 7px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.3;
+  }
+  .pill.warn { border-color: #e2b5a8; color: #9b3528; background: #fff8f6; }
+  .pill.ok { border-color: #aad5c2; color: #226b4a; background: #f2fbf6; }
+  .formula {
+    margin: 10px 0;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    background: #f7f9fa;
+    font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow-wrap: anywhere;
+  }
+  .weight-row { display: grid; grid-template-columns: 115px 1fr 42px; align-items: center; gap: 9px; margin: 8px 0; }
+  .weight-row .track { height: 12px; background: #edf1f4; }
+  .weight-row .fill { height: 100%; background: var(--red); }
+  .weight-row:nth-child(3) .fill { background: var(--orange); }
+  .weight-row:nth-child(4) .fill { background: var(--blue); }
+  .weight-row:nth-child(5) .fill { background: var(--green); }
+  .weight-row:nth-child(6) .fill { background: var(--violet); }
+  .weight-row:nth-child(7) .fill { background: var(--cyan); }
+  .weight-row span:last-child { text-align: right; font-weight: 700; }
+  .svg-wrap { border: 1px solid var(--line); background: #fbfcfd; padding: 8px; }
+  svg { width: 100%; height: auto; display: block; }
+  .architecture-page { page: architecture-landscape; }
+  .architecture-figure {
+    --arch-grid: #dbe4ea;
+    --arch-ink: #1a2a35;
+    --arch-muted: #5f7380;
+    --arch-arrow: #8297a3;
+    --arch-emphasis: #148765;
+    --arch-security: #c74634;
+    --arch-database: #7657ad;
+    --arch-cloud: #b77325;
+    --arch-cyan: #168da0;
+    --arch-region: rgba(183, 115, 37, .07);
+    --arch-panel: #f7fafb;
+    margin-top: 18px;
+    border: 1px solid #c9d6de;
+    background: var(--arch-panel);
+    padding: 12px;
+    overflow: hidden;
+  }
+  .architecture-figure svg {
+    width: 100%;
+    height: auto;
+    background: #f7fafb;
+  }
+  .architecture-figure .c-grid { stroke: var(--arch-grid); fill: none; }
+  .architecture-figure .c-mask { fill: #fff; stroke: none; }
+  .architecture-figure .c-frontend { fill: rgba(22, 141, 160, .11); stroke: var(--arch-cyan); }
+  .architecture-figure .c-backend { fill: rgba(20, 135, 101, .11); stroke: var(--arch-emphasis); }
+  .architecture-figure .c-database { fill: rgba(118, 87, 173, .11); stroke: var(--arch-database); }
+  .architecture-figure .c-cloud { fill: rgba(183, 115, 37, .11); stroke: var(--arch-cloud); }
+  .architecture-figure .c-security { fill: rgba(199, 70, 52, .09); stroke: var(--arch-security); }
+  .architecture-figure .c-external { fill: rgba(95, 115, 128, .10); stroke: #627886; }
+  .architecture-figure .c-security-group { fill: none; stroke: #c74634; stroke-dasharray: 4,4; }
+  .architecture-figure .c-region { fill: var(--arch-region); stroke: var(--arch-cloud); stroke-dasharray: 8,4; }
+  .architecture-figure .t-primary { fill: var(--arch-ink); }
+  .architecture-figure .t-muted { fill: var(--arch-muted); }
+  .architecture-figure .t-backend { fill: var(--arch-emphasis); }
+  .architecture-figure .t-cloud { fill: var(--arch-cloud); }
+  .architecture-figure .t-security { fill: var(--arch-security); }
+  .architecture-figure .t-external { fill: #627886; }
+  .architecture-figure .t-messagebus { fill: #c65f27; }
+  .architecture-figure .a-emphasis { stroke: var(--arch-emphasis); fill: none; }
+  .architecture-figure .a-security { stroke: var(--arch-security); fill: none; stroke-dasharray: 5,5; }
+  .architecture-figure .a-dashed { stroke: var(--arch-database); fill: none; stroke-dasharray: 4,4; }
+  .architecture-figure .m-emphasis { fill: var(--arch-emphasis); }
+  .architecture-figure .m-security { fill: var(--arch-security); }
+  .architecture-figure .m-dashed { fill: var(--arch-database); }
+  .architecture-figure .semantic-sigil { fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; opacity: .76; }
+  .architecture-figure .s-backend { color: var(--arch-emphasis); }
+  .architecture-figure .s-security { color: var(--arch-security); }
+  .architecture-figure .s-cloud { color: var(--arch-cloud); }
+  .architecture-figure .s-external { color: #627886; }
+  .architecture-figure .s-frontend { color: var(--arch-cyan); }
+  .architecture-figure .s-database { color: var(--arch-database); }
+  .architecture-caption {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .architecture-caption a { color: var(--red); font-weight: 700; }
+  .contribution-box { margin-top: 16px; border: 1px solid #c9d6de; background: #fbfcfd; padding: 14px; }
+  .contribution-box h3 { margin-bottom: 10px; }
+  .contribution-table { font-size: 11px; }
+  .contribution-table th { background: #f2f5f7; color: var(--ink); }
+  .contribution-table td:first-child { width: 22%; font-weight: 750; color: var(--ink); }
+  .contribution-table td:nth-child(2) { width: 51%; }
+  .contribution-table td:nth-child(3) { width: 27%; color: var(--muted); }
+  .contribution-boundary { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--orange); background: #fff9ef; color: #5c4a25; font-size: 11px; }
+  @page architecture-landscape { size: A4 landscape; margin: 12mm 14mm; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px 18px; margin-top: 8px; color: var(--muted); font-size: 11px; }
+  .legend span:before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 50%; background: currentColor; vertical-align: -1px; }
+  .legend .l-opus { color: var(--orange); }
+  .legend .l-gpt { color: var(--green); }
+  .legend .l-deepseek { color: var(--violet); }
+  .legend .l-kimi { color: var(--blue); }
+  .legend .l-qwen { color: var(--cyan); }
+  .legend .l-baseline { color: #b88422; }
+  .legend .l-above { color: var(--red); }
+  .legend .l-below { color: #627886; }
+  .baseline-legend { gap: 8px 15px; }
+  .baseline-legend span:before { border-radius: 2px; }
+  .overall-strip { margin-top: 16px; border: 1px solid var(--line); background: #fbfcfd; padding: 10px 12px 8px; overflow-x: auto; }
+  .overall-strip svg { min-width: 640px; }
+  .baseline-reading { margin-top: 8px; padding: 10px 12px; border-left: 3px solid #b88422; background: #fff9ed; color: #5c4a25; font-size: 11px; }
+  .timeline-note { margin-top: 8px; color: var(--muted); font-size: 11px; }
+  .timeline-table td { padding: 7px 8px; }
+  .timeline-table .track { position: relative; height: 18px; background: linear-gradient(to right, #f8ebe7 0 16.67%, #f5f7f8 16.67% 100%); }
+  .timeline-table .track:before { content: ""; position: absolute; left: 16.67%; top: 0; bottom: 0; border-left: 1px dashed #dba497; }
+  .timeline-table .run { position: absolute; left: 0; top: 6px; height: 6px; background: var(--navy-2); }
+  .timeline-table .stop { position: absolute; top: 2px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--red); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--red); }
+  .timeline-table .stop.done { background: var(--green); box-shadow: 0 0 0 1px var(--green); }
+  .timeline-scale { display: flex; justify-content: space-between; margin-left: 102px; color: var(--muted); font-size: 10px; }
+  .model-card { border: 1px solid var(--line); background: #fff; padding: 16px; }
+  .model-card h3 { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .model-card .headline { color: var(--red); font-weight: 750; }
+  .model-card ul { margin: 9px 0 0; padding-left: 18px; }
+  .model-card li { margin: 4px 0; }
+  .model-card .evidence { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+  .metric-glossary { font-size: 11px; }
+  .metric-glossary th:first-child { width: 18%; }
+  .metric-glossary th:nth-child(2) { width: 32%; }
+  .metric-glossary th:nth-child(3) { width: 32%; }
+  .metric-glossary th:nth-child(4) { width: 18%; }
+  .metric-glossary td:first-child { font-weight: 750; color: var(--ink); }
+  .metric-glossary td:nth-child(4) { color: var(--muted); }
+  .term { border-bottom: 1px dotted #9aaab5; cursor: help; }
+  .trace-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .trace-card { min-width: 0; border: 1px solid var(--line); background: #fbfcfd; padding: 14px; }
+  .trace-card.qwen { border-color: #9bcbd2; background: #f5fbfc; }
+  .trace-card.opus { border-color: #e5c48e; background: #fffaf1; }
+  .trace-card h3 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .trace-card pre {
+    margin: 10px 0 0;
+    padding: 12px;
+    border: 1px solid rgba(24,36,49,.12);
+    background: #17242d;
+    color: #eef5f7;
+    font: 10px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .trace-card .trace-caption { margin-top: 9px; color: var(--muted); font-size: 11px; }
+  .trace-compare + .callout { margin-top: 16px; }
+  .source-story { margin-top: 18px; }
+  .source-story .source-flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 12px; }
+  .source-story .source-flow > div { padding: 12px 14px; border: 1px solid var(--line); border-right: 0; background: #f7f9fa; }
+  .source-story .source-flow > div:last-child { border-right: 1px solid var(--line); }
+  .source-story .source-flow b { display: block; margin-bottom: 3px; }
+  .source-story .source-flow span { color: var(--muted); font-size: 11px; }
+  .metric-example { margin-top: 10px; padding: 11px 13px; border-left: 3px solid var(--blue); background: #f4f8ff; color: #304558; font-size: 11px; }
+  .definition-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin: 0; }
+  .definition-list > div { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .definition-list dt { font-weight: 750; }
+  .definition-list dd { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+  .reading-box { margin-top: 16px; border: 1px solid #c9d6de; background: #fbfcfd; padding: 14px; }
+  .reading-box h3 { margin-top: 0; }
+  .reading-box .reading-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+  .reading-box .reading-item { border-left: 3px solid var(--blue); background: #f4f8ff; padding: 10px 11px; min-width: 0; }
+  .reading-box .reading-item.warn { border-left-color: var(--red); background: #fff7f5; }
+  .reading-box .reading-item.ok { border-left-color: var(--green); background: #f3faf6; }
+  .reading-box .reading-item b { display: block; margin-bottom: 3px; }
+  .reading-box .reading-item span { display: block; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .score-audit { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 11px; }
+  .score-audit th, .score-audit td { border: 1px solid var(--line); padding: 7px 8px; vertical-align: top; text-align: left; }
+  .score-audit th { background: #f2f5f7; color: var(--ink); font-weight: 750; }
+  .score-audit td:first-child { font-weight: 750; white-space: nowrap; }
+  .score-audit .bad { color: #a43a2d; font-weight: 750; }
+  .score-audit .good { color: #24734f; font-weight: 750; }
+  .source-note { margin-top: 18px; }
+  .source-note .field-flow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; margin-top: 10px; }
+  .source-note .field-flow > div { min-width: 0; padding: 9px 8px; border: 1px solid var(--line); border-right: 0; background: #f7f9fa; }
+  .source-note .field-flow > div:last-child { border-right: 1px solid var(--line); }
+  .source-note .field-flow b { display: block; font-size: 10px; }
+  .source-note .field-flow span { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+  .opus-evidence { margin-top: 18px; border: 1px solid #e5c48e; background: #fffaf1; padding: 14px; }
+  .opus-evidence h3 { margin-top: 0; }
+  .opus-evidence .timeline-mini { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+  .opus-evidence .timeline-mini > div { border-top: 2px solid var(--orange); padding-top: 7px; min-width: 0; }
+  .opus-evidence .timeline-mini b { display: block; font-size: 11px; }
+  .opus-evidence .timeline-mini span { display: block; color: var(--muted); font-size: 10px; line-height: 1.45; margin-top: 3px; }
+  .log-facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+  .log-facts > div { border: 1px solid var(--line); background: #f7f9fa; padding: 8px 9px; min-width: 0; }
+  .log-facts b { display: block; font-size: 11px; }
+  .log-facts span { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+  .term-strip { margin-top: 12px; padding: 10px 12px; border: 1px dashed #b8c7cf; background: #f8fafb; color: var(--muted); font-size: 11px; line-height: 1.55; }
+  .state-key { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 12px; }
+  .state-key > div { padding: 10px 12px; border: 1px solid #294251; border-right: 0; background: rgba(255,255,255,.045); }
+  .state-key > div:last-child { border-right: 1px solid #294251; }
+  .state-key b { display: block; color: #fff; margin-bottom: 2px; }
+  .state-key span { color: #b9c8d1; font-size: 11px; }
+  .gate-list { margin: 10px 0 4px; padding-left: 20px; }
+  .gate-list li { margin: 4px 0; }
+  .gate-list code { white-space: nowrap; }
+  .compare-table { font-size: 11px; }
+  .compare-table td:first-child { font-weight: 750; }
+  .compare-table td.num { white-space: nowrap; }
+  .plain-note { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--blue); background: #f4f8ff; color: #304558; font-size: 11px; }
+  .qwen-case {
+    display: grid;
+    grid-template-columns: 1fr 1.25fr;
+    gap: 18px;
+    align-items: stretch;
+  }
+  .big-number {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    margin: 9px 0;
+  }
+  .big-number b { color: var(--red); font-size: 54px; line-height: 1; letter-spacing: 0; }
+  .big-number span { color: var(--muted); }
+  .standards td:first-child { width: 15%; font-weight: 750; }
+  .standards td:nth-child(2) { width: 34%; }
+  .standards td:nth-child(3) { width: 31%; }
+  .standards td:nth-child(4) { width: 20%; color: var(--muted); }
+  .table-scroll { max-width: 100%; overflow-x: auto; }
+  .table-scroll > table { min-width: 0; }
+  .scroll-note { display: none; }
+  .archive-table { margin-top: 12px; }
+  .checklist { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .check {
+    padding: 12px 14px;
+    border-left: 3px solid var(--green);
+    background: #f3faf6;
+  }
+  .check.warn { border-left-color: var(--orange); background: #fff9ef; }
+  .footer {
+    padding: 18px 54px 28px;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+    font-size: 10px;
+  }
+  code {
+    padding: 1px 4px;
+    background: #eef2f5;
+    color: #314452;
+    font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @page { size: A4; margin: 14mm 16mm; }
+  @media (max-width: 760px) {
+    html, body { overflow-x: hidden; }
+    .report { margin: 0; }
+    .page { padding: 28px 22px 34px; min-width: 0; overflow-x: clip; }
+    .cover { min-height: 860px; }
+    .cover:after { display: none; }
+    .metric-grid, .grid-3, .facts { grid-template-columns: 1fr 1fr; }
+    .grid-2, .qwen-case { grid-template-columns: 1fr; }
+    .trace-compare { grid-template-columns: 1fr; }
+    .source-story .source-flow { grid-template-columns: 1fr; }
+    .source-story .source-flow > div { border-right: 1px solid var(--line); border-bottom: 0; }
+    .source-story .source-flow > div:last-child { border-bottom: 1px solid var(--line); }
+    .definition-list { grid-template-columns: 1fr; }
+    .state-key { grid-template-columns: 1fr; }
+    .state-key > div { border-right: 1px solid #294251; border-bottom: 0; }
+    .state-key > div:last-child { border-bottom: 1px solid #294251; }
+    .grid-2 > *, .grid-3 > *, .qwen-case > * { min-width: 0; }
+    .panel, .svg-wrap, .model-card { min-width: 0; overflow-x: auto; }
+    .panel table, .svg-wrap table { display: block; max-width: 100%; overflow-x: auto; }
+    .score-table { min-width: 520px; }
+    .ranking-table { min-width: 760px; }
+    .timeline-table { min-width: 560px; }
+    .timeline-panel { overflow-x: auto; }
+    .timeline-panel .timeline-table { display: table !important; width: 560px; }
+    .standards { min-width: 760px; }
+    .table-scroll .standards { width: 760px; }
+    .table-scroll .archive-table { width: 760px; min-width: 760px; }
+    .scroll-note { display: block; margin-top: 6px; }
+    .page > table { display: block; max-width: 100%; overflow-x: auto; min-width: 560px; }
+    .flow { grid-template-columns: 1fr 1fr; }
+    .flow-step { border-right: 1px solid var(--line); }
+    .flow-step:not(:last-child):after { display: none; }
+    .weight-row { grid-template-columns: 92px minmax(60px, 1fr) 38px; gap: 7px; }
+    .flow-step:nth-child(2) { border-right: 1px solid var(--line); }
+    .flow-step:nth-child(3), .flow-step:nth-child(4) { border-top: 0; }
+    .flow-step:nth-child(2):after { display: none; }
+    .standards { font-size: 11px; }
+    .contribution-box { overflow-x: auto; }
+    .contribution-table { min-width: 760px; }
+    .reading-box .reading-grid, .opus-evidence .timeline-mini { grid-template-columns: 1fr 1fr; }
+    .source-note .field-flow { grid-template-columns: repeat(3, 1fr); }
+    .source-note .field-flow > div:nth-child(3) { border-right: 1px solid var(--line); }
+    .source-note .field-flow > div:nth-child(n + 4) { border-top: 0; }
+    .log-facts { grid-template-columns: 1fr 1fr; }
+    .architecture-page .architecture-figure { overflow-x: auto; }
+    .architecture-page .architecture-figure svg { width: 680px; max-width: none; }
+  }
+  @media print {
+    html, body { background: #fff; }
+    body { font-size: 10.5pt; }
+    .report { max-width: none; margin: 0; box-shadow: none; }
+    .page { padding: 0; min-height: 0; }
+    .cover { min-height: 255mm; padding: 22mm 18mm 18mm; }
+    .page:not(.cover) { padding: 12mm 0 10mm; }
+    .footer { padding: 8mm 0 0; }
+    .panel, .model-card, .fact, .metric, .svg-wrap { break-inside: avoid; }
+    .trace-card, .source-story, .metric-glossary { break-inside: avoid; }
+    .reading-box, .opus-evidence, .source-note, .log-facts { break-inside: avoid; }
+    .architecture-page .grid-3 { display: none; }
+    .architecture-page .architecture-figure { margin-top: 6px; padding: 8px; }
+    .architecture-page .architecture-figure svg { width: auto; max-width: 100%; max-height: 430px; margin: 0 auto; }
+    .architecture-page .architecture-caption { margin-top: 6px; }
+    h2 { font-size: 22pt; }
+    h3 { font-size: 12.5pt; }
+    .small, .legend, .timeline-note { font-size: 8.5pt; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<main class="report">
+  <section class="page cover">
+    <div>
+      <div class="eyebrow">BENCHMARK FIELD REPORT / 2026-08-23</div>
+      <h1>SFFD<br>Rolling Surge 01</h1>
+      <div class="subtitle">看不见未来的 EMS 在线调度评测<br>任务 1.1.0 / 独立评分器 verifier 0.2</div>
+      <div class="thesis">
+        把模型放进一个持续有新事故到达、资源有限、状态不可完全预知的急救调度回合。<br>
+        我们比较的不是一段漂亮的调度说明，而是模型能否持续观察、正确派遣、及时适应，并把整个回合做完。
+      </div>
+    </div>
+    <div class="cover-meta">
+      <div><strong>12</strong>可调度医疗事故</div>
+      <div><strong>12</strong>辆异构车辆</div>
+      <div><strong>7,200 s</strong>逻辑时钟</div>
+      <div><strong>5</strong>条冻结对比运行（最高思考档）</div>
+    </div>
+  </section>
+
+  <section class="page">
+    <div class="kicker muted">01 / 结论先行</div>
+    <h2>同一场景已经把模型分成四层行为梯队</h2>
+    <p class="section-lead">
+      本报告冻结批次的五模型横向比较显示：Opus 和 GPT 组成第一梯队，DeepSeek 与 Kimi
+      都能完成服务但时效更弱，Qwen 则在事件循环中途停止。这个分层来自轨迹，而不是模型自报的总结。
+    </p>
+    <div class="callout" style="margin-top:20px">
+      <strong>版本说明：</strong>
+      本页使用的是轨迹包在 2026-08-23 约 00:19:22Z 冻结的五条对比运行；之后工作树中出现的探索性跑次没有纳入本报告或归档压缩包，因此这里的“Qwen 低分”和模型层级只对这五条冻结轨迹成立，不宣称模型在所有后续跑次都保持同样表现。
+      <br><br>
+      其余四条运行的原始运行清单明确写有 <code>task_version=1.1.0</code>。Opus 运行
+      <code>20260822T215558Z</code> 是 verifier 0.2 和 1.1.0 参考字段齐全的早期
+      carry-over（沿用上一轮生成结果的兼容跑）；它的清单没有 task_version，prompt 仍保留早期
+      episode-end 文案。它适合做当前同场景诊断；严格发布排名仍建议用统一 1.1.0 prompt 重跑 Opus。
+    </div>
+    <div class="metric-grid">
+      <div class="metric"><span class="label">最高模型分</span><span class="value">0.287</span><span class="label">Opus 5</span></div>
+      <div class="metric"><span class="label">最强规则基线</span><span class="value">0.330</span><span class="label">nearest / priority-nearest</span></div>
+      <div class="metric"><span class="label">最大模型断层</span><span class="value">0.121</span><span class="label">Kimi 到 Qwen</span></div>
+      <div class="metric"><span class="label">重放完整性</span><span class="value">5 / 5</span><span class="label">双次 hash 一致</span></div>
+    </div>
+    <div class="panel">
+      <h3>官方 overall 排名</h3>
+      <table class="score-table ranking-table">
+        <thead><tr><th>混排位置 / 参照对象</th><th>类型</th><th class="num">官方总分<br><span class="small">0~1 排序数</span></th><th>相对条形图</th><th class="num">完成事故数</th><th class="num">超过目标时间（SLA）的到场数</th></tr></thead>
+        <tbody>
+          <tr class="baseline-row"><td><span class="rank">01</span> <span class="baseline-dot nearest"></span>nearest-unit</td><td><span class="pill baseline-pill">规则基线</span></td><td class="num">0.330338</td><td><div class="barline"><div class="bartrack"><div class="barfill baseline" style="width:100%"></div></div><span class="small">100%</span></div></td><td class="num">12 / 12</td><td class="num">2</td></tr>
+          <tr class="baseline-row"><td><span class="rank">01</span> <span class="baseline-dot nearest"></span>priority-nearest</td><td><span class="pill baseline-pill">规则基线</span></td><td class="num">0.330338</td><td><div class="barline"><div class="bartrack"><div class="barfill baseline" style="width:100%"></div></div><span class="small">100%</span></div></td><td class="num">12 / 12</td><td class="num">2</td></tr>
+          <tr><td><span class="rank">03</span> <span class="model-tag opus"></span>Opus 5 <span class="pill warn">沿用轨迹</span></td><td><span class="pill">模型</span></td><td class="num">0.287464</td><td><div class="barline"><div class="bartrack"><div class="barfill red" style="width:87%"></div></div><span class="small">87.0%</span></div></td><td class="num">12 / 12</td><td class="num">2</td></tr>
+          <tr><td><span class="rank">04</span> <span class="model-tag gpt"></span>GPT-5.6 Sol</td><td><span class="pill">模型</span></td><td class="num">0.252751</td><td><div class="barline"><div class="bartrack"><div class="barfill green" style="width:76.5%"></div></div><span class="small">76.5%</span></div></td><td class="num">12 / 12</td><td class="num">2</td></tr>
+          <tr class="baseline-row"><td><span class="rank">05</span> <span class="baseline-dot"></span>rolling-horizon</td><td><span class="pill baseline-pill">规则基线</span></td><td class="num">0.219143</td><td><div class="barline"><div class="bartrack"><div class="barfill baseline" style="width:66.3%"></div></div><span class="small">66.3%</span></div></td><td class="num">12 / 12</td><td class="num">2</td></tr>
+          <tr><td><span class="rank">06</span> <span class="model-tag deepseek"></span>DeepSeek V4 Pro</td><td><span class="pill">模型</span></td><td class="num">0.208978</td><td><div class="barline"><div class="bartrack"><div class="barfill violet" style="width:63.3%"></div></div><span class="small">63.3%</span></div></td><td class="num">12 / 12</td><td class="num">3</td></tr>
+          <tr class="baseline-row"><td><span class="rank">07</span> <span class="baseline-dot random"></span>random-feasible</td><td><span class="pill baseline-pill">规则基线</span></td><td class="num">0.198002</td><td><div class="barline"><div class="bartrack"><div class="barfill baseline" style="width:59.9%"></div></div><span class="small">59.9%</span></div></td><td class="num">12 / 12</td><td class="num">4</td></tr>
+          <tr><td><span class="rank">08</span> <span class="model-tag kimi"></span>Kimi K3</td><td><span class="pill">模型</span></td><td class="num">0.197613</td><td><div class="barline"><div class="bartrack"><div class="barfill blue" style="width:59.8%"></div></div><span class="small">59.8%</span></div></td><td class="num">12 / 12</td><td class="num">3</td></tr>
+          <tr><td><span class="rank">09</span> <span class="model-tag qwen"></span>Qwen 3.8 Max</td><td><span class="pill">模型</span></td><td class="num">0.076426</td><td><div class="barline"><div class="bartrack"><div class="barfill cyan" style="width:23.1%"></div></div><span class="small">23.1%</span></div></td><td class="num">0 / 12</td><td class="num">未形成</td></tr>
+          <tr class="baseline-row"><td><span class="rank">10</span> <span class="baseline-dot noop"></span>no-op</td><td><span class="pill baseline-pill">规则基线</span></td><td class="num">0.050000</td><td><div class="barline"><div class="bartrack"><div class="barfill baseline" style="width:15.1%"></div></div><span class="small">15.1%</span></div></td><td class="num">0 / 12</td><td class="num">—</td></tr>
+        </tbody>
+      </table>
+      <p class="small" style="margin-top:10px"><code>overall</code> 是六项加权后的官方排序数，不是“掌握度百分比”。这里按总分混排，<span class="pill baseline-pill">规则基线</span> 是固定场景下的公开策略参照，不是模型；条形图以最强规则基线 <code>0.330338</code> 为 100%。<code>nearest</code> 的“近”指同 battalion 粗区域上的可复现启发式，不是 GPS 路网距离。表中的“完成事故数”是便于阅读的 12/12 计数，评分文件另有按优先级加权的 <code>completion_rate</code>。五条冻结运行的 <code>strict_pass</code> 均为 0：它是一个不参与加权的 0/1 全通门槛，必须所有条件同时满足；一条轨迹即使拿到较高 <code>overall</code>，只要迟到、出现无效操作或漏掉高优先级事故，仍会是 0。</p>
+    </div>
+    <div class="grid-2" style="margin-top:18px">
+      <div class="panel soft">
+        <h3>分数告诉我们的第一件事</h3>
+        <p>第一梯队和中间梯队的差距主要来自 response 与 timely coverage；四条完整轨迹的 completion 都是 1，但 q² 和 SLA 迟到仍然拉开分数。</p>
+      </div>
+      <div class="panel red">
+        <h3>分数告诉我们的第二件事</h3>
+        <p>Qwen 的低分不是日志完整性坏了，而是业务完成率为 0。它的 <code>integrity</code> 仍是 1，真正的问题是没有把 <code>advance - service_complete - release - replan - done</code> 闭环走完。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="page">
+    <div class="kicker muted">02 / 评测集是什么</div>
+    <h2>一个复合型在线调度题，不是十二道独立题</h2>
+    <p class="section-lead">场景从真实 SFFD/EMS CAD 记录抽取业务语义，再用离散事件模拟器把旅行、服务、释放和派遣延迟变成可控、可重复的动态环境。它是一道连续回合题：12 个可派事故共享同一支车队，前一个决定会改变后一个决定的可行空间。</p>
+    <div class="facts">
+      <div class="fact"><b>7,200 s</b><span>逻辑时间上限（horizon）</span></div>
+      <div class="fact"><b>1,200 s</b><span>持续揭示新事故的窗口</span></div>
+      <div class="fact"><b>16</b><span>总到达事件</span></div>
+      <div class="fact"><b>12</b><span>可调度医疗事故</span></div>
+      <div class="fact"><b>6</b><span>battalion 粗粒度区域</span></div>
+      <div class="fact"><b>12</b><span>异构车辆，10 辆初始可用</span></div>
+    </div>
+    <div class="grid-2">
+      <div class="panel">
+        <h3>原始数据原来做什么</h3>
+        <ul>
+          <li><span class="term" title="Computer-Aided Dispatch">CAD</span> 是消防/急救调度系统的业务记录：一行通常表示“一辆车响应一次事故”，同一事故可以有多行。</li>
+          <li>公开数据集名为 <i>Fire Department and Emergency Medical Services Dispatched Calls for Service</i>，由 San Francisco Fire Department / Department of Emergency Management 发布，ID 为 <code>nuek-vuh3</code>，许可证 PDDL（开放数据许可）；<a href="https://data.sfgov.org/Public-Safety/Fire-Department-and-Emergency-Medical-Services-Dis/nuek-vuh3">官方 DataSF 页面</a>可核对来源与字段。</li>
+          <li>它原本用于记录接警、派遣、出车、到场、转运/医院交接和恢复可用等运营事实，支持公共安全分析与运营审计；它不是为本 benchmark 写的“标准答案”。</li>
+          <li>原始快照约 740 万行、36 个业务字段；本版本只冻结其中一周的 7,183 行作校准，再取一个 20 分钟到达窗口生成场景。</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>我们取了哪一小段</h3>
+        <ul>
+          <li>过去 7 天（2025-03-04 至 2025-03-11）的历史响应链只用于校准 travel（行驶）5,617 条、service（现场服务）/release（恢复可用）5,595 条和 dispatch delay（派遣延迟）6,978 条经验观测；真正给模型连续处理的是一个 20 分钟（1,200 秒）的到达窗口。</li>
+          <li>从 <span class="term" title="Emergency Medical Services，急救医疗服务">EMS</span>（急救医疗服务）切片中生成 16 个到达事件，其中 12 个有完整可派响应链；另外 4 个事故被标为不可调度的 <code>background</code>（背景事件），只用于还原时间和外部活动，不进入派遣评分。场景还会记录少量外部单位的背景响应，这些同样不算模型完成量。</li>
+          <li>这是“历史事实 → 匿名化 → 经验校准 → 反事实模拟”的链条：模型的动作和得分是模拟出来的反事实，不冒充历史真值。</li>
+          <li>Agent-facing 场景不暴露地址、坐标、精确位置和 source rowid（原始数据行编号）；私有 verifier 仍保留必要的来源绑定来做审计。</li>
+          <li><span class="term" title="battalion：消防系统的粗粒度分区">battalion</span> 是消防分区，不是精确地址；<code>latent</code> 指环境内部保留但不向模型公开的状态。</li>
+        </ul>
+        <h3 style="margin-top:14px">车队与事故约束</h3>
+        <ul>
+          <li>12 辆车：8 辆 <span class="term" title="MEDIC：医疗急救单元">MEDIC</span>（其中 7 辆具备 ALS，高级生命支持；RA48 不具备 ALS）、2 辆 BLS（基础生命支持）、2 辆 PRIVATE（私人救护车类型）。</li>
+          <li>开局 2 辆车 <code>BUSY</code>（回合开始前就已被占用），10 辆可用；车辆释放只会在 <code>advance</code> 处理到对应事件后发生。</li>
+          <li>12 个可调度事故由 P1×1、P2×7、P3×4 组成；P1/P2 是高优先级，P3 是较低优先级。六个 battalion 分区制造跨区资源竞争。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="panel soft source-story">
+      <h3>从一张历史表到一回合评测</h3>
+      <div class="source-flow">
+        <div><b>1 / 历史记录</b><span>观察真实的收到时间、派遣时间、到场时间、服务/释放时间、优先级和车辆类型。</span></div>
+        <div><b>2 / 场景化</b><span>只保留 battalion 粗粒度区域，按历史分布构造 12 辆车、16 个到达和非均匀延迟。</span></div>
+        <div><b>3 / 反事实回合</b><span>模型每次只能看到当前状态；不同派遣会产生不同的在途、完成和资源竞争结果。</span></div>
+      </div>
+      <p class="small" style="margin-top:10px">因此，“真实”指业务语义、时间分布和资源约束有真实来源；“可评测”指这些因素被固定在可复位、可重放的模拟器里，而不是把一条历史派车记录当作唯一正确答案。</p>
+    </div>
+    <div class="panel source-note">
+      <h3>原始一行记录，如何变成可计算的时间链</h3>
+      <p class="small">原始表不是“一个事故一行”：同一个 <code>incident_number</code> 可能有多行，每行对应一辆响应车辆。我们先按事故和车辆整理这些时间字段，再从历史分布抽样出模拟延迟；因此模型改变的是派车决策，评分器仍能独立计算到场和完成。</p>
+      <div class="field-flow" aria-label="原始 CAD 时间字段流程">
+        <div><b>received</b><span>接警进入系统</span></div>
+        <div><b>dispatch</b><span>调度指令发出</span></div>
+        <div><b>response</b><span>车辆开始响应</span></div>
+        <div><b>on scene</b><span>车辆到达现场</span></div>
+        <div><b>transport / hospital</b><span>转运与交接（如有）</span></div>
+        <div><b>available</b><span>车辆恢复可派</span></div>
+      </div>
+      <p class="small" style="margin-top:10px">字段来源分三层：<b>observed</b> 是历史中直接观测到的事实，<b>derived</b> 是由时间差或车辆能力推导的量，<b>counterfactual</b> 是模型采取不同动作后由模拟器产生的结果。报告中的分数属于第三层，不是历史数据里的原始标签。</p>
+    </div>
+    <h3 style="margin-top:24px">一回合的状态循环</h3>
+    <div class="flow">
+      <div class="flow-step"><b>observe</b><span>读取当前公开状态、车辆和已揭示事故</span></div>
+      <div class="flow-step"><b>dispatch / reassign</b><span>在能力、区域和优先级之间取舍</span></div>
+      <div class="flow-step"><b>advance</b><span>推进到下一个到达、到场、完成或释放事件</span></div>
+      <div class="flow-step"><b>done / finish</b><span>推进到 horizon，再结束回合</span></div>
+    </div>
+    <div class="panel dark">
+      <h3>部分可观测性是题目本身</h3>
+      <p class="muted">模型只能通过唯一工具 <code>emsctl</code> 工作。未来事故、车辆 release time（车辆恢复可用的时间）、校准参数、随机种子、latent（环境内部保留的隐藏状态）和 verifier 都不可见。写操作必须携带最新 <code>state_version</code>（环境状态的版本号，旧版本会被拒绝）和唯一 <code>action_id</code>（一次写操作的编号）；服务完成和车辆释放只有在 <code>advance</code> 后才会发生。</p>
+      <div class="state-key" aria-label="状态词白话解释">
+        <div><b>BUSY / AVAILABLE</b><span>BUSY 是开局或外部任务占用；AVAILABLE 才能被派出。</span></div>
+        <div><b>EN_ROUTE / ON_SCENE</b><span>EN_ROUTE 是正在赶路；ON_SCENE 是已到现场但还没有完成服务。</span></div>
+        <div><b>HIDDEN / service_complete</b><span>HIDDEN 是尚未被推进到、模型还看不到的事故；service_complete 是服务事件已发生并进入释放流程。</span></div>
+      </div>
+      <p class="small" style="margin-top:10px;color:#b9c8d1"><code>horizon</code> 是 7,200 秒的逻辑时间上限；正常推进到上限或无后续事件时才应看到 <code>done=true</code>。提前 <code>finish</code> 也可能把它置 true，所以还要核对完成事件与 <code>finished</code>；它不等于模型拿到高分。</p>
+    </div>
+  </section>
+
+  <section class="page">
+    <div class="kicker muted">03 / 如何评估</div>
+    <h2>从动作轨迹重算，而不是相信模型自报结果</h2>
+    <p class="section-lead">独立 verifier（评分程序）读取只追加、不应被改写的动作日志、事件日志和关键状态快照，重放模拟器，再计算六个官方维度。模型的最终总结只作为观察材料，不作为评分输入。</p>
+    <div class="grid-2">
+      <div class="panel">
+        <h3>官方评分权重</h3>
+        <div class="weight-row"><span>Response / 到场</span><div class="track"><div class="fill" style="width:100%"></div></div><span>40%</span></div>
+        <div class="weight-row"><span>Coverage / 完成</span><div class="track"><div class="fill" style="width:50%"></div></div><span>20%</span></div>
+        <div class="weight-row"><span>Safety / 规则</span><div class="track"><div class="fill" style="width:37.5%"></div></div><span>15%</span></div>
+        <div class="weight-row"><span>Adaptation / 适应</span><div class="track"><div class="fill" style="width:25%"></div></div><span>10%</span></div>
+        <div class="weight-row"><span>Efficiency / 少浪费</span><div class="track"><div class="fill" style="width:25%"></div></div><span>10%</span></div>
+        <div class="weight-row"><span>Integrity / 可审计</span><div class="track"><div class="fill" style="width:12.5%"></div></div><span>5%</span></div>
+      </div>
+      <div class="panel soft">
+        <h3>最关键的两个门槛</h3>
+        <div class="formula">q = clip(1 - response_delay / SLA, 0, 1)<br>response = priority-weighted mean(q²)<br>coverage = priority-weighted mean(completed ? q : 0)<br>service_gate = response × coverage</div>
+        <p>把公式翻成白话：先看第一次到场比事故公开时间晚多少。P1/P2/P3 的目标到场时间分别是 480/900/1,200 秒；P1 权重最高。比如 P1 晚 240 秒，<code>q=0.5</code>，官方先平方成 <code>0.25</code>，所以临界迟到会明显吃亏；完全没有到场时 <code>q=0</code>。</p>
+        <p><span class="term" title="timely coverage：完成服务，并按到场是否及时给分">coverage</span> 不是“派出过几辆车”，而是事故真的完成服务，并把同一个 <code>q</code> 计入覆盖；在 SLA 内按剩余时限给部分分，超过 SLA 则为 0。<span class="term" title="service_gate：response 与 coverage 的乘积">service gate</span> 是业务完成门控：它不是额外的一项权重，而是把 safety、adaptation、efficiency 三项乘上一个 0~1 的完成质量；只派出、没有完成，三项运营分也拿不到。</p>
+      </div>
+    </div>
+    <div class="metric-example"><b>先读这句话：</b>这套分数故意把“看起来做了很多动作”和“真的把事故及时服务完”分开。<code>response</code> 可以因为到场而有分，但只有完成服务才有 <code>coverage</code>；因此 Qwen 能留下少量 response，却因 coverage=0 使 service gate=0。</div>
+    <div class="grid-3" style="margin-top:18px">
+      <div class="panel"><h3>普通错误：连续扣分</h3><p class="muted">环境拒绝一次旧版本、重复编号或能力不符的写操作，会形成一条可定位的 invalid finding，并按不同操作尝试扣一点 safety/efficiency；完全相同命令的同一编号重试可视为幂等，不重复扣。</p></div>
+      <div class="panel"><h3>致命错误：整体无效</h3><p class="muted">如果模型泄漏隐藏状态、真正破坏资源状态、篡改日志，或同一动作日志无法被独立模拟器重放，触发 hard failure，官方总分和参考分都会清零。</p></div>
+      <div class="panel"><h3>诊断字段：不是排名分</h3><p class="muted"><code>completion_rate</code>、<code>late_count</code>、<code>high_priority_missed</code> 和 <code>overall_reference</code> 用来解释“为什么得分这样”，不能替代官方 <code>overall</code>。</p></div>
+    </div>
+    <div class="panel" style="margin-top:18px">
+      <h3>strict pass：严格全通，不是“跑没跑起来”</h3>
+      <p>它是一个“全部条件都要过”的 0/1 门槛，不参与 <code>overall</code> 的加权。只要有一项不满足，结果就是 0；不会因为其他项目做得好而折算成 0.8 或 0.9。</p>
+      <ul class="gate-list">
+        <li><b>全部完成：</b>12 个可调度事故的优先级加权完成量达到 100%，不是只完成几个低优先级事故。</li>
+        <li><b>高优先级不漏：</b>没有任何 P1/P2 事故完全没有车辆到场。</li>
+        <li><b>全部及时：</b>每个第一次到场都不超过自己的 SLA（P1=480、P2=900、P3=1,200 秒）。</li>
+        <li><b>没有违规证据：</b>没有无效写操作，也没有被接受的灾难性资源操作。</li>
+        <li><b>证据可复核：</b>动作日志能独立重放，两次 state/trace hash 一致，<code>integrity=1</code>。</li>
+      </ul>
+      <p class="small">因此本次五条都为 0，并不表示五条都失败或分数相同：Opus/GPT/DeepSeek/Kimi 都完成了 12/12，但有 SLA 迟到或 invalid evidence；Qwen 则在完成服务之前停止。<code>verdict=ok</code> 只表示程序正常退出并产出可验证结果，和业务上的 strict pass 是两件事。实现上 verifier 不把 <code>done</code> 或 <code>finished</code> 单独当作一项分数，但任务契约仍要求推进到 horizon；没有完成事件的轨迹通常也不可能通过上述全部门槛。</p>
+    </div>
+    <div class="reading-box">
+      <h3>把“严格全通”对回五条实际轨迹</h3>
+      <p class="small">下面的“卡点”不是另一个排名分，而是解释为什么同一批运行都显示 <code>strict_pass=0</code>。注意：<b>晚到</b>、<b>漏派</b>、<b>无效写</b>和<b>未完成服务</b>是不同的失败证据，不能混成一个“模型坏了”。</p>
+      <table class="score-audit">
+        <thead><tr><th>模型</th><th>完成情况</th><th>卡点证据</th><th>这说明什么</th></tr></thead>
+        <tbody>
+          <tr><td>Opus 5</td><td class="good">12 / 12</td><td><span class="bad">2 次超过 SLA</span>；3 条 invalid finding（旧版本号、重复/冲突编号）</td><td>业务闭环完成，但严格门槛仍要求零迟到、零无效写。</td></tr>
+          <tr><td>GPT-5.6 Sol</td><td class="good">12 / 12</td><td><span class="bad">2 次超过 SLA</span>；无 invalid finding</td><td>工具操作很干净，但时效仍未达到 strict pass。</td></tr>
+          <tr><td>DeepSeek V4 Pro</td><td class="good">12 / 12</td><td><span class="bad">3 次超过 SLA</span>；3 条 invalid finding</td><td>完成不等于及时完成，后程协议错误也会挡住全通。</td></tr>
+          <tr><td>Kimi K3</td><td class="good">12 / 12</td><td><span class="bad">3 次超过 SLA</span>；无 invalid finding</td><td>协议可靠，但等待资源造成迟到。</td></tr>
+          <tr><td>Qwen 3.8 Max</td><td class="bad">0 / 12</td><td><span class="bad">7 个 P1/P2 没有到场</span>；0 次服务完成；<code>done=false</code></td><td>不是 replay 失败，而是提前停止，回合没有进入完成阶段。</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="reading-box">
+      <h3>一个数值例子：为什么 I004 的迟到会很贵</h3>
+      <div class="reading-grid">
+        <div class="reading-item"><b>事故公开</b><span>I004 在逻辑时间 t=178 到达，优先级 P1，目标到场时间 SLA=480 秒。</span></div>
+        <div class="reading-item warn"><b>实际到场</b><span>完成轨迹都在 t=693 到场，延迟 515 秒；因为超过 480 秒，q 被截到 0，late_count 加 1。</span></div>
+        <div class="reading-item"><b>评分后果</b><span>response 使用 q²；coverage 还要求服务完成。于是“派对了车”不等于“及时覆盖”，也不会自动通过 strict pass。</span></div>
+      </div>
+      <p class="plain-note"><b>总分的直觉：</b>四条完整轨迹的 completion 都是 1，但它们在 response、coverage、迟到数量和无效操作上不同，所以 overall 仍能分层。Qwen 的 overall=0.076426，则主要是 40% 的 response 残余分（0.066065）加上 5% 的 integrity 分；其余运营维度因 service gate=0 被门控。</p>
+    </div>
+    <h3 style="margin-top:24px">评估流水线</h3>
+    <div class="flow">
+      <div class="flow-step"><b>动作 JSONL</b><span>记录每次调用、版本和 hash</span></div>
+      <div class="flow-step"><b>独立 replay</b><span>重建事件与状态转换</span></div>
+      <div class="flow-step"><b>六维评分</b><span>按优先级、SLA、门控计算</span></div>
+      <div class="flow-step"><b>双次校验</b><span>state / trace hash 一致才可信</span></div>
+    </div>
+    <div class="callout">
+      <strong>口径提醒：</strong>DeepSeek 的未门控 linear reference 为 0.575615，Kimi 为 0.586727；但官方平方 + service gate 口径下 DeepSeek 为 0.208978，Kimi 为 0.197613。这个顺序变化说明官方分数确实更敏感地惩罚 SLA 迟到和服务质量，不应把 reference 分数当排名分。
+    </div>
+  </section>
+
+  <section class="page architecture-page">
+    <div class="kicker muted">04 / 评测架构</div>
+    <h2>从真实数据到可审计评分的一条闭环</h2>
+    <p class="section-lead">这张图把评测的边界、唯一工具入口、隐藏模拟器、动作日志和独立 verifier 放在同一条因果链上。模型只接触左侧公开契约，私有 scenario 和评分逻辑留在隔离边界内。</p>
+    <figure class="architecture-figure" aria-labelledby="architecture-figure-title">
+      <div id="architecture-figure-title" class="small" style="font-weight:750; color:var(--ink); margin:0 0 8px">SFFD Rolling Surge 01 / 评测架构</div>
+      <svg viewBox="0 0 1350 712" role="img" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
+        <title id="archify-diagram-title">abench 评测架构：数据构建到评分探索</title>
+        <desc id="archify-diagram-description">SFFD Rolling Surge 01 的评测架构：数据构建、任务环境、模型工具入口、模拟器、动作日志与独立评分。</desc>
+        <!-- Definitions -->
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" class="m-default" />
+          </marker>
+          <marker id="arrowhead-emphasis" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" class="m-emphasis" />
+          </marker>
+          <marker id="arrowhead-security" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" class="m-security" />
+          </marker>
+          <marker id="arrowhead-dashed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" class="m-dashed" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" class="c-grid" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background Grid -->
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- Boundaries (behind everything) -->
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="离线任务环境（模型不可见 scenario）" x="356" y="196" width="768" height="278" rx="12" class="c-region" stroke-width="1"/>
+
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="1" data-composition-frame-label="宿主机评测编排" x="550" y="16" width="760" height="628" rx="8" class="c-security-group" stroke-width="1"/>
+
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="security-group" data-composition-frame-id="2" data-composition-frame-label="评测器私有数据" x="366" y="56" width="928" height="418" rx="8" class="c-security-group" stroke-width="1"/>
+
+        <!-- Connection paths (before components for correct z-order) -->
+        <path data-edge-from="source_csv" data-edge-to="scenario_builder" data-edge-label="读取并校验字段" data-edge-key="0" data-composition-points="160,252;190,252" d="M 160 252 L 190 252" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="scenario_builder" data-edge-to="task_package" data-edge-label="写出 scenario.json" data-edge-key="1" data-composition-points="350,252;365,252;365,402;380,402" d="M 350 252 L 357.5 252 Q 365 252 365 259.5 L 365 394.5 Q 365 402 372.5 402 L 380 402" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="source_csv" data-edge-to="variant_builder" data-edge-label="冻结切片" data-edge-key="2" data-composition-points="160,252;160,182;380,182;380,112" d="M 160 252 L 160 190 Q 160 182 168 182 L 372 182 Q 380 182 380 174 L 380 112" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="variant_builder" data-edge-to="simulator" data-edge-label="挂载隐藏变体" data-edge-key="3" data-composition-points="460,80;460,20;1120,20;1120,350;1025,350;1025,390" d="M 460 80 L 460 28 Q 460 20 468 20 L 1112 20 Q 1120 20 1120 28 L 1120 342 Q 1120 350 1112 350 L 1033 350 Q 1025 350 1025 358 L 1025 390" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="task_package" data-edge-to="pi_harness" data-edge-label="instruction + compose" data-edge-key="4" data-composition-points="540,402;555,402;555,252;570,252" d="M 540 402 L 547.5 402 Q 555 402 555 394.5 L 555 259.5 Q 555 252 562.5 252 L 570 252" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="model_api" data-edge-to="pi_harness" data-edge-label="LLM 调用" data-edge-key="5" data-composition-points="650,104;650,162;650,162;650,220" d="M 650 104 L 650 162 L 650 162 L 650 220" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="pi_harness" data-edge-to="emsctl_bridge" data-edge-label="唯一工具调用" data-edge-key="6" data-composition-points="730,252;760,252" d="M 730 252 L 760 252" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="emsctl_bridge" data-edge-to="main_container" data-edge-label="固定 argv / podman exec" data-edge-key="7" data-composition-points="920,252;950,252" d="M 920 252 L 950 252" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="main_container" data-edge-to="simulator" data-edge-label="Unix socket JSONL" data-edge-key="8" data-composition-points="1025,284;1025,390" d="M 1025 284 L 1025 390" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="simulator" data-edge-to="action_log" data-edge-label="记录动作与状态" data-edge-key="9" data-composition-points="1100,422;1130,422" d="M 1100 422 L 1130 422" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="action_log" data-edge-to="verifier" data-edge-label="评分权威输入" data-edge-key="10" data-composition-points="1205,390;1205,284" d="M 1205 390 L 1205 284" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="task_package" data-edge-to="verifier" data-edge-label="scenario + tests" data-edge-key="11" data-composition-points="460,434;460,500;1320,500;1320,252;1280,252" d="M 460 434 L 460 492 Q 460 500 468 500 L 1312 500 Q 1320 500 1320 492 L 1320 260 Q 1320 252 1312 252 L 1280 252" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="verifier" data-edge-to="explorer" data-edge-label="评分产物" data-edge-key="12" data-composition-points="1280,252;1320,252;1320,592;1290,592" d="M 1280 252 L 1312 252 Q 1320 252 1320 260 L 1320 584 Q 1320 592 1312 592 L 1290 592" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+
+        <!-- Components -->
+        <g id="node-source_csv" data-node-id="source_csv" data-node-label="冻结 SFFD CSV" tabindex="0" role="button" aria-label="Focus 冻结 SFFD CSV, 观测响应记录, Architecture component" aria-pressed="false" data-node-kind="external" data-node-sublabel="观测响应记录" data-node-context="Architecture component">
+          <title>冻结 SFFD CSV · 观测响应记录 · Architecture component</title>
+          <rect x="20" y="220" width="140" height="64" rx="6" class="c-mask"/>
+          <rect x="20" y="220" width="140" height="64" rx="6" class="c-external" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(26 226) scale(0.6875)">
+            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+          </g>
+          <text data-node-label data-detail-anchor x="90" y="250" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">冻结 SFFD CSV</text>
+        <text data-detail="context" x="90" y="266" class="t-muted" font-size="9" text-anchor="middle">观测响应记录</text>
+        </g>
+
+        <g id="node-scenario_builder" data-node-id="scenario_builder" data-node-label="build_sffd_scenario.py" tabindex="0" role="button" aria-label="Focus build_sffd_scenario.py, 校验、聚合、校准, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="校验、聚合、校准" data-node-context="Architecture component">
+          <title>build_sffd_scenario.py · 校验、聚合、校准 · Architecture component</title>
+          <rect x="190" y="220" width="160" height="64" rx="6" class="c-mask"/>
+          <rect x="190" y="220" width="160" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(196 226) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label data-detail-anchor x="270" y="250" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">build_sffd_scenario.py</text>
+        <text data-detail="context" x="270" y="266" class="t-muted" font-size="9" text-anchor="middle">校验、聚合、校准</text>
+        </g>
+
+        <g id="node-variant_builder" data-node-id="variant_builder" data-node-label="build_sffd_variants.py" tabindex="0" role="button" aria-label="Focus build_sffd_variants.py, 隐藏真实窗口变体, 评测器私有数据" aria-pressed="false" data-node-kind="security" data-node-sublabel="隐藏真实窗口变体" data-node-context="评测器私有数据">
+          <title>build_sffd_variants.py · 隐藏真实窗口变体 · 评测器私有数据</title>
+          <rect x="380" y="80" width="160" height="64" rx="6" class="c-mask"/>
+          <rect x="380" y="80" width="160" height="64" rx="6" class="c-security" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(386 86) scale(0.6875)">
+            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+            <path d="m5.8 8 1.5 1.5 3-3"/>
+          </g>
+          <text data-node-label data-detail-anchor x="460" y="110" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">build_sffd_variants.py</text>
+        <text data-detail="context" x="460" y="126" class="t-muted" font-size="9" text-anchor="middle">隐藏真实窗口变体</text>
+        </g>
+
+        <g id="node-task_package" data-node-id="task_package" data-node-label="任务包" tabindex="0" role="button" aria-label="Focus 任务包, 任务契约, 离线任务环境（模型不可见 scenario）" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="任务契约" data-node-context="离线任务环境（模型不可见 scenario）">
+          <title>任务包 · 任务契约 · 离线任务环境（模型不可见 scenario）</title>
+          <rect x="380" y="370" width="160" height="64" rx="6" class="c-mask"/>
+          <rect x="380" y="370" width="160" height="64" rx="6" class="c-cloud" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(386 376) scale(0.6875)">
+            <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
+          </g>
+          <text data-node-label data-detail-anchor x="460" y="400" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">任务包</text>
+        <text data-detail="context" x="460" y="416" class="t-muted" font-size="9" text-anchor="middle">任务契约</text>
+        </g>
+
+        <g id="node-model_api" data-node-id="model_api" data-node-label="模型 API" tabindex="0" role="button" aria-label="Focus 模型 API, provider / thinking 最高档, 宿主机评测编排" aria-pressed="false" data-node-kind="external" data-node-sublabel="provider / thinking 最高档" data-node-context="宿主机评测编排">
+          <title>模型 API · provider / thinking 最高档 · 宿主机评测编排</title>
+          <rect x="570" y="40" width="160" height="64" rx="6" class="c-mask"/>
+          <rect x="570" y="40" width="160" height="64" rx="6" class="c-external" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(576 46) scale(0.6875)">
+            <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
+            <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
+          </g>
+          <text data-node-label data-detail-anchor x="650" y="70" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">模型 API</text>
+        <text data-detail="context" x="650" y="86" class="t-muted" font-size="9" text-anchor="middle">provider / thinking 最高档</text>
+        </g>
+
+        <g id="node-pi_harness" data-node-id="pi_harness" data-node-label="run-pi-harness.sh" tabindex="0" role="button" aria-label="Focus run-pi-harness.sh, 宿主机 orchestration, 宿主机评测编排" aria-pressed="false" data-node-kind="backend" data-node-sublabel="宿主机 orchestration" data-node-context="宿主机评测编排">
+          <title>run-pi-harness.sh · 宿主机 orchestration · 宿主机评测编排</title>
+          <rect x="570" y="220" width="160" height="64" rx="6" class="c-mask"/>
+          <rect x="570" y="220" width="160" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(576 226) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label data-detail-anchor x="650" y="250" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">run-pi-harness.sh</text>
+        <text data-detail="context" x="650" y="266" class="t-muted" font-size="9" text-anchor="middle">宿主机 orchestration</text>
+        </g>
+
+        <g id="node-emsctl_bridge" data-node-id="emsctl_bridge" data-node-label="唯一工具 emsctl" tabindex="0" role="button" aria-label="Focus 唯一工具 emsctl, 固定 argv，白名单命令, 宿主机评测编排" aria-pressed="false" data-node-kind="security" data-node-sublabel="固定 argv，白名单命令" data-node-context="宿主机评测编排">
+          <title>唯一工具 emsctl · 固定 argv，白名单命令 · 宿主机评测编排</title>
+          <rect x="760" y="220" width="160" height="64" rx="6" class="c-mask"/>
+          <rect x="760" y="220" width="160" height="64" rx="6" class="c-security" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(766 226) scale(0.6875)">
+            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+            <path d="m5.8 8 1.5 1.5 3-3"/>
+          </g>
+          <text data-node-label data-detail-anchor x="840" y="250" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">唯一工具 emsctl</text>
+        <text data-detail="context" x="840" y="266" class="t-muted" font-size="9" text-anchor="middle">固定 argv，白名单命令</text>
+        </g>
+
+        <g id="node-main_container" data-node-id="main_container" data-node-label="main 容器" tabindex="0" role="button" aria-label="Focus main 容器, agent-facing emsctl, 离线任务环境（模型不可见 scenario）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="agent-facing emsctl" data-node-context="离线任务环境（模型不可见 scenario）">
+          <title>main 容器 · agent-facing emsctl · 离线任务环境（模型不可见 scenario）</title>
+          <rect x="950" y="220" width="150" height="64" rx="6" class="c-mask"/>
+          <rect x="950" y="220" width="150" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(956 226) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label data-detail-anchor x="1025" y="250" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">main 容器</text>
+        <text data-detail="context" x="1025" y="266" class="t-muted" font-size="9" text-anchor="middle">agent-facing emsctl</text>
+        </g>
+
+        <g id="node-simulator" data-node-id="simulator" data-node-label="simulator sidecar" tabindex="0" role="button" aria-label="Focus simulator sidecar, 隐藏 scenario + 事件推进, 评测器私有数据 › 离线任务环境（模型不可见 scenario）" aria-pressed="false" data-node-kind="backend" data-node-sublabel="隐藏 scenario + 事件推进" data-node-context="评测器私有数据 › 离线任务环境（模型不可见 scenario）">
+          <title>simulator sidecar · 隐藏 scenario + 事件推进 · 评测器私有数据 › 离线任务环境（模型不可见 scenario）</title>
+          <rect x="950" y="390" width="150" height="64" rx="6" class="c-mask"/>
+          <rect x="950" y="390" width="150" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(956 396) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label data-detail-anchor x="1025" y="420" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">simulator sidecar</text>
+        <text data-detail="context" x="1025" y="436" class="t-muted" font-size="9" text-anchor="middle">隐藏 scenario + 事件推进</text>
+        </g>
+
+        <g id="node-action_log" data-node-id="action_log" data-node-label="actions.jsonl" tabindex="0" role="button" aria-label="Focus actions.jsonl, sidecar 权威动作日志, 宿主机评测编排 › 评测器私有数据" aria-pressed="false" data-node-kind="database" data-node-sublabel="sidecar 权威动作日志" data-node-context="宿主机评测编排 › 评测器私有数据">
+          <title>actions.jsonl · sidecar 权威动作日志 · 宿主机评测编排 › 评测器私有数据</title>
+          <rect x="1130" y="390" width="150" height="64" rx="6" class="c-mask"/>
+          <rect x="1130" y="390" width="150" height="64" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(1136 396) scale(0.6875)">
+            <ellipse cx="8" cy="4" rx="5" ry="2"/>
+            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+          </g>
+          <text data-node-label data-detail-anchor x="1205" y="420" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">actions.jsonl</text>
+        <text data-detail="context" x="1205" y="436" class="t-muted" font-size="9" text-anchor="middle">sidecar 权威动作日志</text>
+        </g>
+
+        <g id="node-verifier" data-node-id="verifier" data-node-label="harbor_verify.sh" tabindex="0" role="button" aria-label="Focus harbor_verify.sh, 独立回放与评分, 宿主机评测编排 › 评测器私有数据" aria-pressed="false" data-node-kind="security" data-node-sublabel="独立回放与评分" data-node-context="宿主机评测编排 › 评测器私有数据">
+          <title>harbor_verify.sh · 独立回放与评分 · 宿主机评测编排 › 评测器私有数据</title>
+          <rect x="1130" y="220" width="150" height="64" rx="6" class="c-mask"/>
+          <rect x="1130" y="220" width="150" height="64" rx="6" class="c-security" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(1136 226) scale(0.6875)">
+            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+            <path d="m5.8 8 1.5 1.5 3-3"/>
+          </g>
+          <text data-node-label data-detail-anchor x="1205" y="250" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">harbor_verify.sh</text>
+        <text data-detail="context" x="1205" y="266" class="t-muted" font-size="9" text-anchor="middle">独立回放与评分</text>
+        </g>
+
+        <g id="node-explorer" data-node-id="explorer" data-node-label="score-explorer.html" tabindex="0" role="button" aria-label="Focus score-explorer.html, 官方 / 参考双口径, 宿主机评测编排" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="官方 / 参考双口径" data-node-context="宿主机评测编排">
+          <title>score-explorer.html · 官方 / 参考双口径 · 宿主机评测编排</title>
+          <rect x="1130" y="560" width="160" height="64" rx="6" class="c-mask"/>
+          <rect x="1130" y="560" width="160" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(1136 566) scale(0.6875)">
+            <rect x="2" y="3" width="12" height="10" rx="2"/>
+            <path d="M2 6.5h12"/>
+            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+          </g>
+          <text data-node-label data-detail-anchor x="1210" y="590" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">score-explorer.html</text>
+        <text data-detail="context" x="1210" y="606" class="t-muted" font-size="9" text-anchor="middle">官方 / 参考双口径</text>
+        </g>
+
+        <!-- Connection labels -->
+        <g data-detail="context" data-edge-from="source_csv" data-edge-to="scenario_builder" data-edge-label="读取并校验字段" data-edge-key="0">
+          <rect x="179.4" y="330" width="77.2" height="14" rx="3" class="c-mask"/>
+          <text x="218" y="340" class="t-backend" font-size="8" text-anchor="middle">读取并校验字段</text>
+        </g>
+        <g data-detail="context" data-edge-from="scenario_builder" data-edge-to="task_package" data-edge-label="写出 scenario.json" data-edge-key="1">
+          <rect x="316.8" y="307" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
+          <text x="365" y="317" class="t-backend" font-size="8" text-anchor="middle">写出 scenario.json</text>
+        </g>
+        <g data-detail="context" data-edge-from="source_csv" data-edge-to="variant_builder" data-edge-label="冻结切片" data-edge-key="2">
+          <rect x="245.8" y="162" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="270" y="172" class="t-security" font-size="8" text-anchor="middle">冻结切片</text>
+        </g>
+        <g data-detail="context" data-edge-from="variant_builder" data-edge-to="simulator" data-edge-label="挂载隐藏变体" data-edge-key="3">
+          <rect x="766.2" y="330" width="67.6" height="14" rx="3" class="c-mask"/>
+          <text x="800" y="340" class="t-security" font-size="8" text-anchor="middle">挂载隐藏变体</text>
+        </g>
+        <g data-detail="context" data-edge-from="task_package" data-edge-to="pi_harness" data-edge-label="instruction + compose" data-edge-key="4">
+          <rect x="499.6" y="307" width="110.8" height="14" rx="3" class="c-mask"/>
+          <text x="555" y="317" class="t-backend" font-size="8" text-anchor="middle">instruction + compose</text>
+        </g>
+        <g data-detail="context" data-edge-from="model_api" data-edge-to="pi_harness" data-edge-label="LLM 调用" data-edge-key="5">
+          <rect x="625.8" y="142" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="650" y="152" class="t-backend" font-size="8" text-anchor="middle">LLM 调用</text>
+        </g>
+        <g data-detail="context" data-edge-from="pi_harness" data-edge-to="emsctl_bridge" data-edge-label="唯一工具调用" data-edge-key="6">
+          <rect x="864.2" y="320" width="67.6" height="14" rx="3" class="c-mask"/>
+          <text x="898" y="330" class="t-security" font-size="8" text-anchor="middle">唯一工具调用</text>
+        </g>
+        <g data-detail="context" data-edge-from="emsctl_bridge" data-edge-to="main_container" data-edge-label="固定 argv / podman exec" data-edge-key="7">
+          <rect x="789.8" y="300" width="120.39999999999999" height="14" rx="3" class="c-mask"/>
+          <text x="850" y="310" class="t-security" font-size="8" text-anchor="middle">固定 argv / podman exec</text>
+        </g>
+        <g data-detail="context" data-edge-from="main_container" data-edge-to="simulator" data-edge-label="Unix socket JSONL" data-edge-key="8">
+          <rect x="979.2" y="300" width="91.6" height="14" rx="3" class="c-mask"/>
+          <text x="1025" y="310" class="t-security" font-size="8" text-anchor="middle">Unix socket JSONL</text>
+        </g>
+        <g data-detail="context" data-edge-from="simulator" data-edge-to="action_log" data-edge-label="记录动作与状态" data-edge-key="9">
+          <rect x="1061.4" y="470" width="77.2" height="14" rx="3" class="c-mask"/>
+          <text x="1100" y="480" class="t-messagebus" font-size="8" text-anchor="middle">记录动作与状态</text>
+        </g>
+        <g data-detail="context" data-edge-from="action_log" data-edge-to="verifier" data-edge-label="评分权威输入" data-edge-key="10">
+          <rect x="1171.2" y="370" width="67.6" height="14" rx="3" class="c-mask"/>
+          <text x="1205" y="380" class="t-backend" font-size="8" text-anchor="middle">评分权威输入</text>
+        </g>
+        <g data-detail="context" data-edge-from="task_package" data-edge-to="verifier" data-edge-label="scenario + tests" data-edge-key="11">
+          <rect x="756.6" y="505" width="86.8" height="14" rx="3" class="c-mask"/>
+          <text x="800" y="515" class="t-security" font-size="8" text-anchor="middle">scenario + tests</text>
+        </g>
+        <g data-detail="context" data-edge-from="verifier" data-edge-to="explorer" data-edge-label="评分产物" data-edge-key="12">
+          <rect x="1235.8" y="510" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="1260" y="520" class="t-backend" font-size="8" text-anchor="middle">评分产物</text>
+        </g>
+
+        <!-- Boundary labels (foreground masks keep routes out of titles) -->
+        <g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="离线任务环境（模型不可见 scenario）">
+          <rect data-graph-role="structural-frame-label-mask" x="360" y="200" width="199" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label x="364" y="213" class="t-cloud" font-size="9" font-weight="600">离线任务环境（模型不可见 scenario）</text>
+        </g>
+
+        <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="security-group" data-composition-frame-label="宿主机评测编排">
+          <rect data-graph-role="structural-frame-label-mask" x="554" y="20" width="85.6" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label x="558" y="33" class="t-security" font-size="9" font-weight="600">宿主机评测编排</text>
+        </g>
+
+        <g data-graph-role="structural-frame-label" data-composition-frame-id="2" data-composition-frame-kind="security-group" data-composition-frame-label="评测器私有数据">
+          <rect data-graph-role="structural-frame-label-mask" x="370" y="60" width="85.6" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label x="374" y="73" class="t-security" font-size="9" font-weight="600">评测器私有数据</text>
+        </g>
+
+        <!-- Legend -->
+        <g data-legend data-legend-bridge>
+          <text x="40" y="676" class="t-primary" font-size="12" font-weight="650">图例</text>
+          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="Frontend" data-legend-x="40" data-legend-baseline="696" data-legend-width="83">
+            <rect x="40" y="687" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
+            <text x="62" y="696" class="t-muted" font-size="10" font-weight="500">前端</text>
+          </g>
+          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Backend" data-legend-x="145" data-legend-baseline="696" data-legend-width="78">
+            <rect x="145" y="687" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
+            <text x="167" y="696" class="t-muted" font-size="10" font-weight="500">后端</text>
+          </g>
+          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="Database" data-legend-x="245" data-legend-baseline="696" data-legend-width="83">
+            <rect x="245" y="687" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
+            <text x="267" y="696" class="t-muted" font-size="10" font-weight="500">数据库</text>
+          </g>
+          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="Cloud" data-legend-x="350" data-legend-baseline="696" data-legend-width="68">
+            <rect x="350" y="687" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
+            <text x="372" y="696" class="t-muted" font-size="10" font-weight="500">任务包</text>
+          </g>
+          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="Security" data-legend-x="440" data-legend-baseline="696" data-legend-width="83">
+            <rect x="440" y="687" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
+            <text x="462" y="696" class="t-muted" font-size="10" font-weight="500">安全</text>
+          </g>
+          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="External" data-legend-x="545" data-legend-baseline="696" data-legend-width="83">
+            <rect x="545" y="687" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
+            <text x="567" y="696" class="t-muted" font-size="10" font-weight="500">外部</text>
+          </g>
+        </g>
+      </svg>
+      <figcaption class="architecture-caption">
+        <span>颜色代表组件角色；红色虚线边界表示私有或安全隔离区域。</span>
+        <a href="docs/evaluation-architecture.html?embed=1&amp;theme=light" target="_blank" rel="noopener">打开可交互架构图</a>
+      </figcaption>
+    </figure>
+    <div class="grid-3" style="margin-top:14px">
+      <div class="panel soft"><h3>公开面</h3><p class="muted">模型 API、harness 和唯一工具 <code>emsctl</code> 只看到当前公开状态。</p></div>
+      <div class="panel soft"><h3>隐藏面</h3><p class="muted">隔离的模拟器辅助进程（simulator sidecar）持有未来事件、车辆释放规律和固定场景文件（scenario）；这些信息不会进入模型观察。</p></div>
+      <div class="panel soft"><h3>评分面</h3><p class="muted">append-only actions 与 replay 结果进入独立 verifier，再输出官方分和诊断产物。</p></div>
+    </div>
+    <div class="contribution-box">
+      <h3>方法贡献：把“真实数据”变成可审计的连续反事实回合</h3>
+      <table class="contribution-table">
+        <thead><tr><th>贡献</th><th>我们实际做了什么</th><th>保守边界</th></tr></thead>
+        <tbody>
+          <tr><td>一｜真实数据到反事实环境的可审计转换链</td><td>历史中直接可见的字段标为 <code>observed</code>；由时间差、粗区域和车辆能力推导的内容标为 <code>derived</code>；Agent 动作引起的状态转移与得分标为 <code>counterfactual</code>。因此“历史事实”和“模拟出来的结果”在数据链上分开可查。</td><td>反事实结果不是历史真值，也不是临床建议。</td></tr>
+          <tr><td>二｜面向连续决策的 EMS 状态机</td><td>事故陆续出现，车辆经历 <code>AVAILABLE → EN_ROUTE → ON_SCENE → AVAILABLE</code> 等状态；Agent 必须在每个观察点重新规划，而不是提交一张静态 dispatch 表。</td><td>这是用于评测的运营状态机，不声称覆盖真实调度中心的全部流程。</td></tr>
+          <tr><td>三｜隐未来与公平反事实</td><td>Agent 看不到未来事件、未来释放时间、校准表和随机 seed；不同策略共享同一开局、同一动力学和同一隐藏 seed，比较的是决策而不是读取答案或抽到更有利的环境。</td><td>当前报告只展示一个公开窗口；跨窗口稳定性仍需多次运行验证。</td></tr>
+          <tr><td>四｜Harbor-compatible 的隔离与回放闭环</td><td>Agent 只有 <code>emsctl</code> 工具，模拟器放在 sidecar，Agent 停止后由独立 verifier 重放；动作日志、state hash 和 trace hash 让第三方可以复核。</td><td>准确称呼是 <b>Harbor-compatible pilot</b>：本机 Podman smoke 已通过，但官方 Harbor runner 尚未在本项目中完成验证。</td></tr>
+          <tr><td>五｜连续、可解释而非单一二值的评分</td><td>官方分同时体现时效、服务覆盖、操作有效性、动态适应、效率和证据链完整性，并保留 <code>late_count</code>、<code>completion_rate</code>、<code>high_priority_missed</code> 等诊断字段，让低分能回指到轨迹证据。</td><td><code>strict_pass</code> 仍是额外的全通门槛；连续分数能解释差异，但不等于真实世界 KPI。</td></tr>
+        </tbody>
+      </table>
+      <div class="contribution-boundary"><b>答辩时的边界句：</b>我们展示的是一条可追溯、可重放的研究型评测链；它证明同一场景下的反事实比较可以被复核，不等于已经完成生产级 EMS 部署或官方 Harbor 认证。</div>
+    </div>
+    <div class="term-strip"><b>图中英文的白话含义：</b>API 是模型接口；harness 是负责启动、喂工具调用和收集日志的运行驱动；sidecar 是与模型隔离、持有隐藏模拟器的辅助容器；scenario 是固定场景文件；append-only 是只能追加、不能悄悄改写的动作日志；replay 是把同一动作序列在独立模拟器重新执行。</div>
+  </section>
+
+  <section class="page">
+    <div class="kicker muted">05 / 指标白话词典</div>
+    <h2>先理解分数，再看排名</h2>
+    <p class="section-lead">这一页把报告里所有容易被误读的字段翻成普通读者可以复核的语言。所有分数都在 0 到 1 之间，越高越好；但只有 <code>overall</code> 用于本次排序，其他字段用来解释得分来自哪里。</p>
+    <div class="grid-2">
+      <div class="panel">
+        <h3>六项官方分数</h3>
+        <dl class="definition-list">
+          <div><dt>Response / 到场及时度</dt><dd>每个事故从“公开到达”到“第一辆车到场”经过多久。先按 SLA 换算成 0~1 的 <code>q</code>，再按 P1/P2/P3 加权并平方；越早越高，延迟达到 SLA 时分数已归零，超过 SLA 还会另外计入 <code>late_count</code>，没有到场也是 0。q² 会放大临界迟到的损失。</dd></div>
+          <div><dt>Timely coverage / 及时完成覆盖</dt><dd>只有事故真的完成服务才有覆盖分；在 SLA 内按同一个 <code>q</code> 给部分分，超过 SLA 则为 0。分母是优先级权重总和，本场景为 8.25，不是简单的“完成了几个事故”。</dd></div>
+          <div><dt>Safety / 操作有效性</dt><dd>这里不是临床安全评分，而是检查是否遵守车辆能力、忙闲状态、状态版本和动作编号规则。普通被拒操作会按比例扣分；而且所有操作分还要乘 service gate，所以“操作合法但没有完成服务”也不会得到满分。</dd></div>
+          <div><dt>Adaptation / 动态适应</dt><dd>面对新事故到达和优先级变化时，模型是否继续处理并减少高优先级漏派；verifier 也支持道路/故障等扩展事件，但它们不在本次公开窗口的主要变化里。显式 <code>reassign</code>/<code>reposition</code> 会增加重规划计数；当前 verifier 不把 <code>unit_release</code> 单独算作动态事件，五条轨迹也没有实际使用这两类重规划操作。</dd></div>
+          <div><dt>Efficiency / 调度经济性</dt><dd>是否避免超过必要工作的反复改派或回位（churn），以及无效写操作。<code>observe</code>/<code>advance</code> 本身不算 churn；最后仍要乘 service gate，因此空转或早停不能靠“少操作”刷高分。</dd></div>
+          <div><dt>Integrity / 证据链完整性</dt><dd>同一动作日志能否在独立模拟器重跑两次，得到相同的状态/轨迹指纹，并且日志没有被删改。它证明结果可审计，不证明策略一定好；Qwen 就是完整性为 1、业务完成率仍为 0 的例子。</dd></div>
+        </dl>
+      </div>
+      <div class="panel soft">
+        <h3>总分、门控和诊断字段</h3>
+        <dl class="definition-list">
+          <div><dt>Overall / 官方总分</dt><dd>六项按 40%/20%/15%/10%/10%/5% 加权后的 0~1 排序数，不是百分比、通过率或模型掌握度；只应在同版本、同口径运行之间比较。</dd></div>
+          <div><dt>Completion rate / 加权完成率</dt><dd>已完成事故的优先级权重 ÷ 全部可派事故的优先级权重。本场景总权重为 P1×1 + P2×7×0.75 + P3×4×0.5 = 8.25；报告里的“12/12”是事故数量，Qwen 派出 7 个但一个也没完成，所以这里仍是 0。</dd></div>
+          <div><dt>Service gate / 服务门控</dt><dd><code>response × coverage</code> 的乘积，是 safety、adaptation、efficiency 三项运营分的共同乘数；它本身不额外占权重。只派出、不完成，gate 就会等于 0，规范的操作也拿不到运营分。</dd></div>
+          <div><dt>Late count / 超 SLA 到场数</dt><dd>按第一次到场延迟是否超过对应 SLA 计数，不看服务完成时间。晚到和完全没到场是两类不同问题；前者会记入 late，后者会记入 missed。</dd></div>
+          <div><dt>High-priority missed / 高优先级漏派数</dt><dd>完全没有车辆到场的 P1/P2 事故数；已经派车但仍在路上也会暂时算“没有到场”。“晚到”不等于“漏派”，所以这个字段不能替代 late count；Qwen 的 7 表示它停下时仍有 7 个高优先级事故没有到场证据。</dd></div>
+          <div><dt>Reference / 参考口径</dt><dd><code>overall_reference</code> 是给人解释用的第二把尺：它保留完成服务的 coverage，但不把到场质量平方，也不把 safety、adaptation、efficiency 乘上 service gate。它能帮助看出“迟到惩罚”和“完成门控”压缩了多少分，但绝不能替代官方排名。</dd></div>
+          <div><dt>未门控参考分</dt><dd><code>response_linear</code> 是没有平方的线性到场质量；<code>safety_ungated</code>、<code>adaptation_ungated</code>、<code>efficiency_ungated</code> 是尚未乘 service gate 的三项参考值。它们是诊断刻度，不是额外奖励，也不参与 <code>overall</code>。</dd></div>
+          <div><dt>Strict pass / 严格全通</dt><dd>一个 0/1 门槛：每个可调度事故都必须有完成服务事件；P1/P2 都必须至少有一辆车真正到场；第一次到场不能超过各自 SLA；不能有任何 invalid evidence 或 catastrophic violation；并且 integrity=1。它不是总分，也不是完成率；有一项不满足就是 0。</dd></div>
+          <div><dt>Hard failure / 致命无效</dt><dd>隐藏状态泄漏、被接受的灾难性资源违规、日志篡改或无法重放时触发。此时官方分和参考分都清零；普通被拒写操作只做连续扣分。</dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-top:18px">
+      <div class="panel">
+        <h3>“错误”与“整体无效”不是一回事</h3>
+        <p><code>simulator rejected</code> 是环境拒绝了某次调用；<code>invalid finding</code> 是独立审计发现的一条违规证据，可能一条调用对应多个原因。评分会按不同操作尝试去重。相同编号重试完全相同的命令是幂等行为；换成另一条命令则是冲突。<code>verdict=ok</code> 只说明运行驱动正常退出并生成了可检查产物，不代表业务任务完成。</p>
+        <p class="small"><code>hard failure</code> 只留给隐藏状态泄漏、被接受的灾难性资源违规、日志篡改或 replay 不一致；触发后官方和参考总分都清零。</p>
+      </div>
+      <div class="panel">
+        <h3>读懂轨迹里的控制字段</h3>
+        <p><code>state_version</code> 是环境状态的版本号，每次状态变化都会更新；旧版本写入会被拒绝。<code>action_id</code> 是每次写操作的唯一编号，用来防止重复记账。</p>
+        <p><code>advance</code> 只把模拟时钟推进到下一个事件，不会替模型自动完成服务；只有推进到服务完成事件，事故才会变成已完成并释放车辆。正常推进时，<code>done=true</code> 表示达到 7,200 秒或没有后续事件；如果提前调用 <code>finish</code>，环境也可能把 <code>done</code> 置为 true，所以必须同时看 <code>finished</code>、完成事件和最终状态。两者都不是“模型已经得高分”的同义词。</p>
+        <p class="small"><code>replay</code> 是把同一动作序列在独立模拟器重跑；state hash（状态指纹）、trace hash（完整轨迹指纹）和 action hash（动作指纹）能证明结果可复现、日志没有悄悄改变，但不能证明策略质量。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="page">
+    <div class="kicker muted">06 / 五条轨迹的横向证据</div>
+    <h2>完整性相同，运营质量不同</h2>
+    <div class="grid-2">
+      <div class="svg-wrap">
+        <h3 style="padding:4px 8px 0">response 与 timely coverage</h3>
+        <svg viewBox="0 0 460 315" role="img" aria-label="response 与 timely coverage 散点图，浅金色区域为规则基线凸包">
+          <rect x="48" y="18" width="370" height="210" fill="#f7f9fa"/>
+          <polygon points="48,228 359.1,35.3 234.8,90.9" fill="#b88422" fill-opacity=".12" stroke="#b88422" stroke-width="1.4" stroke-dasharray="7 4"/>
+          <path d="M48 228 L216.6 108.4 L234.8 90.9 L359.1 35.3" fill="none" stroke="#8c6828" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <line x1="48" y1="228" x2="418" y2="228" stroke="#9aaab5"/>
+          <line x1="48" y1="18" x2="48" y2="228" stroke="#9aaab5"/>
+          <line x1="48" y1="144" x2="418" y2="144" stroke="#d8e0e7" stroke-dasharray="3 4"/>
+          <line x1="48" y1="60" x2="418" y2="60" stroke="#d8e0e7" stroke-dasharray="3 4"/>
+          <line x1="233" y1="18" x2="233" y2="228" stroke="#d8e0e7" stroke-dasharray="3 4"/>
+          <text x="45" y="247" font-size="10" fill="#5f6d7a">0</text><text x="222" y="247" font-size="10" fill="#5f6d7a">0.2</text><text x="405" y="247" font-size="10" fill="#5f6d7a">0.4</text>
+          <text x="20" y="232" font-size="10" fill="#5f6d7a">0</text><text x="12" y="148" font-size="10" fill="#5f6d7a">0.2</text><text x="12" y="64" font-size="10" fill="#5f6d7a">0.4</text><text x="12" y="22" font-size="10" fill="#5f6d7a">0.5</text>
+          <text x="190" y="273" font-size="11" fill="#5f6d7a">response</text><text x="4" y="13" font-size="11" fill="#5f6d7a">coverage</text>
+          <text x="265" y="118" font-size="10" fill="#8c6828" font-weight="700">规则基线凸包</text>
+          <circle cx="48" cy="228" r="5" fill="#f5ead0" stroke="#8c6828" stroke-width="1.3"/><text x="55" y="218" font-size="9" fill="#5c4a25">no-op</text>
+          <circle cx="216.6" cy="108.4" r="5" fill="#edd49b" stroke="#8c6828" stroke-width="1.3"/><text x="184" y="122" font-size="9" fill="#5c4a25">random</text>
+          <circle cx="234.8" cy="90.9" r="5" fill="#e1b45b" stroke="#8c6828" stroke-width="1.3"/><text x="239" y="84" font-size="9" fill="#5c4a25">rolling</text>
+          <circle cx="359.1" cy="35.3" r="6" fill="#c99531" stroke="#8c6828" stroke-width="1.3"/><text x="365" y="28" font-size="9" fill="#5c4a25">nearest / priority</text>
+          <circle cx="321.8" cy="60.7" r="7" fill="#b77325" stroke="#c74634" stroke-width="2"/><text x="333" y="57" font-size="10" fill="#182431">Opus</text>
+          <circle cx="279.6" cy="78.2" r="7" fill="#2b8a62" stroke="#24734f" stroke-width="2"/><text x="291" y="82" font-size="10" fill="#182431">GPT</text>
+          <circle cx="222.1" cy="94.3" r="7" fill="#7657ad" stroke="#c74634" stroke-width="2"/><text x="234" y="99" font-size="10" fill="#182431">DeepSeek</text>
+          <circle cx="203.2" cy="97.3" r="7" fill="#2d6cdf" stroke="#c74634" stroke-width="2"/><text x="178" y="97" font-size="10" fill="#182431">Kimi</text>
+          <circle cx="109.1" cy="228" r="7" fill="#2e899a" stroke="#627886" stroke-width="2"/><text x="121" y="223" font-size="10" fill="#182431">Qwen</text>
+        </svg>
+        <div class="legend baseline-legend"><span class="l-baseline">浅金色：规则基线凸包</span><span class="l-above">红边：高于二维包络</span><span class="l-below">灰边：低于二维包络</span></div>
+        <p class="small">浅金色多边形连接五条公开规则策略在本场景的 <code>response</code>/<code>coverage</code> 组合（重合的 nearest-unit 与 priority-nearest 只占一个几何位置），是一个诊断包络，不是新的官方分数区间。基线坐标为：no-op <code>(0, 0)</code>、random-feasible <code>(.182229, .284747)</code>、rolling-horizon <code>(.201967, .326414)</code>、nearest/priority-nearest <code>(.336347, .458889)</code>。点在浅金色区域内表示这两个维度的组合处于规则基线已经覆盖的范围；按这个凸包定义，GPT 落在区域内，Opus、DeepSeek、Kimi 在上方（超出二维规则包络），Qwen 在下方（低于包络）。这个局部诊断不能直接替代 overall 排名。</p>
+      </div>
+      <div class="panel">
+        <h3>评分和轨迹摘要</h3>
+        <table class="score-table">
+          <thead><tr><th>模型</th><th class="num">到场及时度<br><span class="small">response</span></th><th class="num">及时完成覆盖<br><span class="small">coverage</span></th><th class="num">操作有效性<br><span class="small">safety</span></th><th class="num">动态适应<br><span class="small">adapt.</span></th><th class="num">调度经济性<br><span class="small">eff.</span></th><th class="num">无效操作证据</th></tr></thead>
+          <tbody>
+            <tr><td><span class="model-tag opus"></span>Opus</td><td class="num">.295951</td><td class="num">.398232</td><td class="num">.108791</td><td class="num">.117857</td><td class="num">.113324</td><td class="num">3*</td></tr>
+            <tr><td><span class="model-tag gpt"></span>GPT</td><td class="num">.250398</td><td class="num">.356667</td><td class="num">.089309</td><td class="num">.089309</td><td class="num">.089309</td><td class="num">0</td></tr>
+            <tr><td><span class="model-tag deepseek"></span>DeepSeek</td><td class="num">.188170</td><td class="num">.318333</td><td class="num">.055293</td><td class="num">.059901</td><td class="num">.057597</td><td class="num">3*</td></tr>
+            <tr><td><span class="model-tag kimi"></span>Kimi</td><td class="num">.167748</td><td class="num">.311212</td><td class="num">.052205</td><td class="num">.052205</td><td class="num">.052205</td><td class="num">0</td></tr>
+            <tr><td><span class="model-tag qwen"></span>Qwen</td><td class="num">.066065</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+          </tbody>
+        </table>
+        <p class="small" style="margin-top:10px">* Opus 和 DeepSeek 各有 2 个环境拒绝行；独立 verifier 合并去重后各记 3 个 invalid findings，原因包含旧 state version、重复 ID 和冲突 ID。五条 integrity 均为 1。表中的 safety、adaptation、efficiency 是已经乘过 service gate 的官方组件值，不是“做对了多少百分比”；未门控参考值只用于诊断。</p>
+      </div>
+    </div>
+    <div class="overall-strip" role="img" aria-label="模型与规则基线的官方 overall 分数带，规则基线区间为 0.05 到 0.330338">
+      <h3>官方 overall：模型目前仍未超过最强规则基线</h3>
+      <svg viewBox="0 0 760 145" aria-hidden="true">
+        <rect x="146" y="44" width="526" height="68" fill="#b88422" fill-opacity=".12"/>
+        <line x1="52" y1="78" x2="728" y2="78" stroke="#81909b" stroke-width="1.2"/>
+        <line x1="146" y1="39" x2="146" y2="117" stroke="#b88422" stroke-dasharray="3 3"/>
+        <line x1="672" y1="32" x2="672" y2="117" stroke="#b88422" stroke-dasharray="3 3"/>
+        <text x="382" y="52" text-anchor="middle" font-size="10" fill="#8c6828" font-weight="700">规则基线整体分数区间：0.050000–0.330338</text>
+        <g fill="#5f6d7a" font-size="9">
+          <line x1="52" y1="73" x2="52" y2="83" stroke="#81909b"/><text x="52" y="96" text-anchor="middle">0</text>
+          <line x1="146" y1="73" x2="146" y2="83" stroke="#81909b"/><text x="146" y="96" text-anchor="middle">.05</text>
+          <line x1="240" y1="73" x2="240" y2="83" stroke="#81909b"/><text x="240" y="96" text-anchor="middle">.10</text>
+          <line x1="428" y1="73" x2="428" y2="83" stroke="#81909b"/><text x="428" y="96" text-anchor="middle">.20</text>
+          <line x1="522" y1="73" x2="522" y2="83" stroke="#81909b"/><text x="522" y="96" text-anchor="middle">.25</text>
+          <line x1="616" y1="73" x2="616" y2="83" stroke="#81909b"/><text x="616" y="96" text-anchor="middle">.30</text>
+          <line x1="728" y1="73" x2="728" y2="83" stroke="#81909b"/><text x="728" y="96" text-anchor="middle">.36</text>
+        </g>
+        <g fill="#182431" font-size="9">
+          <circle cx="592" cy="61" r="6" fill="#b77325"/><text x="592" y="28" text-anchor="middle">Opus .287</text>
+          <circle cx="527" cy="61" r="6" fill="#2b8a62"/><text x="527" y="18" text-anchor="middle">GPT .253</text>
+          <circle cx="444" cy="61" r="6" fill="#7657ad"/><text x="444" y="28" text-anchor="middle">DeepSeek .209</text>
+          <circle cx="423" cy="61" r="6" fill="#2d6cdf"/><text x="423" y="18" text-anchor="middle">Kimi .198</text>
+          <circle cx="196" cy="61" r="6" fill="#2e899a"/><text x="196" y="28" text-anchor="middle">Qwen .076</text>
+        </g>
+        <g fill="#5c4a25" font-size="9">
+          <polygon points="672,103 679,110 672,117 665,110" fill="#c99531"/><text x="672" y="133" text-anchor="middle">nearest / priority .330</text>
+          <polygon points="464,103 471,110 464,117 457,110" fill="#e1b45b"/><text x="464" y="133" text-anchor="middle">rolling .219</text>
+          <polygon points="423,103 430,110 423,117 416,110" fill="#edd49b"/><text x="423" y="123" text-anchor="end">random .198</text>
+          <polygon points="146,103 153,110 146,117 139,110" fill="#f5ead0" stroke="#8c6828"/><text x="146" y="133" text-anchor="middle">no-op .050</text>
+        </g>
+      </svg>
+      <div class="legend baseline-legend"><span class="l-baseline">菱形：规则基线</span><span class="l-opus">圆点：模型</span></div>
+      <div class="baseline-reading"><b>读法：</b>整体分数轴上的浅金色带只是五条公开规则策略的数值范围。五个模型都在这条范围内，尚无模型超过 <code>0.330338</code> 的最强规则基线；Opus/GPT 高于 rolling-horizon，DeepSeek 略高于 random-feasible，Kimi 低于 random-feasible <code>0.000389</code>，Qwen 只高于 no-op。二维 response/coverage 图中的“包络外”是另一种诊断口径，不能与这里的 overall 区间混为一谈。</div>
+    </div>
+    <h3 style="margin-top:22px">逻辑时间终点：四条跑到 horizon，Qwen 停在 658 秒</h3>
+    <div class="panel timeline-panel">
+      <div class="timeline-scale"><span>0</span><span>1,200 到达窗口</span><span>7,200 horizon</span></div>
+      <table class="timeline-table">
+        <tbody>
+          <tr><td style="width:94px"><span class="model-tag opus"></span>Opus</td><td><div class="track"><div class="run" style="width:100%"></div><span class="stop done" style="left:100%"></span></div></td><td class="num" style="width:70px">7200</td></tr>
+          <tr><td><span class="model-tag gpt"></span>GPT</td><td><div class="track"><div class="run" style="width:100%"></div><span class="stop done" style="left:100%"></span></div></td><td class="num">7200</td></tr>
+          <tr><td><span class="model-tag deepseek"></span>DeepSeek</td><td><div class="track"><div class="run" style="width:100%"></div><span class="stop done" style="left:100%"></span></div></td><td class="num">7200</td></tr>
+          <tr><td><span class="model-tag kimi"></span>Kimi</td><td><div class="track"><div class="run" style="width:100%"></div><span class="stop done" style="left:100%"></span></div></td><td class="num">7200</td></tr>
+          <tr><td><span class="model-tag qwen"></span>Qwen</td><td><div class="track"><div class="run" style="width:9.14%"></div><span class="stop" style="left:9.14%"></span></div></td><td class="num">658</td></tr>
+        </tbody>
+      </table>
+      <p class="timeline-note">浅红区域是前 1,200 秒事故揭示窗口；横轴是逻辑模拟时间，不是模型等待的墙钟时间。完成的轨迹都显式推进到 <code>done=true</code>，再调用 <code>finish</code>；从 Qwen 的公开终点状态看仍需继续推进，但它随后停止，最终 <code>done=false</code>、<code>finished=false</code>。</p>
+    </div>
+  </section>
+
+  <section class="page">
+    <div class="kicker muted">07 / 模型行为诊断</div>
+    <h2>分数背后是不同的失误类型</h2>
+    <div class="grid-2">
+      <div class="model-card">
+        <h3><span><span class="model-tag opus"></span>Opus 5</span><span class="headline">本条轨迹分最高，协议有瑕疵</span></h3>
+        <ul>
+          <li>74 actions，12 / 12 完成，2 个 SLA 迟到；在这条冻结批次轨迹上官方分最高。</li>
+          <li>为 P1 I004 选择具备 ALS 的 M554，并在资源释放后继续处理 I016，显示出较好的全局资源意识。</li>
+          <li>在 t=101 先派 I003，再用过期 state version 重试 I002；同一 <code>d-001</code> 被重用，留下“旧版本、重复编号、命令冲突”的审计证据。</li>
+          <li>结论：它的连续推进和资源取舍最好，但长轨迹中的版本和 action ID 纪律会直接压低 safety，并通过效率扣分与服务门控影响官方运营组件。</li>
+        </ul>
+        <div class="evidence">证据：I004 response 515 秒，I013 response 1029 秒；actions 74，advance 59，最终 sim_time 7200。</div>
+      </div>
+      <div class="model-card">
+        <h3><span><span class="model-tag gpt"></span>GPT-5.6 Sol</span><span class="headline">操作最稳，调度仍非最优</span></h3>
+        <ul>
+          <li>72 actions，12 / 12 完成，0 invalid action，双次 replay 一致。</li>
+          <li>严格按到达即时派遣，闭环、结束语义和版本管理都很干净。</li>
+          <li>整体低于 Opus，主要差距在 response 与 coverage，而不是安全或完整性。</li>
+          <li>结论：代表“协议可靠但单位选择和跨区时效还有优化空间”。</li>
+        </ul>
+        <div class="evidence">证据：I002 670 秒、I004 515 秒、I013 1029 秒；actions 72，advance 59，最终 sim_time 7200。</div>
+      </div>
+      <div class="model-card">
+        <h3><span><span class="model-tag deepseek"></span>DeepSeek V4 Pro</span><span class="headline">能做完，但后程不够稳</span></h3>
+        <ul>
+          <li>75 actions，12 / 12 完成，3 次 invalid finding，3 个 SLA 迟到。</li>
+          <li>前期能识别 ALS 约束并保留关键能力；中后段在 I013 重试时使用旧 state version 和冲突 ID。</li>
+          <li>I014 在 t=1174 才派出，response 1250 秒，明显拖累 q² 和 service gate。</li>
+          <li>结论：需要把“完成所有事故”和“及时完成”区分开，状态跟踪与后期调度是主要瓶颈。</li>
+        </ul>
+        <div class="evidence">证据：actions 75，advance 60；I004 515 秒、I013 1029 秒、I014 1250 秒。</div>
+      </div>
+      <div class="model-card">
+        <h3><span><span class="model-tag kimi"></span>Kimi K3</span><span class="headline">协议干净，策略偏保守</span></h3>
+        <ul>
+          <li>75 actions，12 / 12 完成，0 invalid action，完整性为 1。</li>
+          <li>能识别 ALS 约束，等待 AM207 释放后再派 I016，说明有资源可用性意识。</li>
+          <li>清空资源的等待过程较长，I013 1029 秒、I014 1200 秒，response 是完整模型中最低之一。</li>
+          <li>结论：问题主要是时效和资源利用，而不是工具协议。</li>
+        </ul>
+        <div class="evidence">证据：actions 75，advance 62；官方 .197613，但未门控 reference .586727，显示门控对迟到很敏感。</div>
+      </div>
+    </div>
+    <div class="panel soft" style="margin-top:18px">
+      <h3>为什么 Opus 在这条冻结轨迹上最高</h3>
+      <p>它并不是“零错误”：它有 3 个 invalid finding，strict pass 仍为 0。领先来自业务结果和持续推进同时较好，而不是来自某一个孤立指标。</p>
+      <table class="compare-table">
+        <thead><tr><th>可观察维度</th><th class="num">Opus 5</th><th class="num">GPT-5.6 Sol</th><th>读法</th></tr></thead>
+        <tbody>
+          <tr><td>官方总分</td><td class="num">.287464</td><td class="num">.252751</td><td>领先 .034713，仍是同一场景、同一开局的单次轨迹比较。</td></tr>
+          <tr><td>到场及时度 response</td><td class="num">.295951</td><td class="num">.250398</td><td>Opus 的优先级加权到场质量更高。</td></tr>
+          <tr><td>及时完成 coverage</td><td class="num">.398232</td><td class="num">.356667</td><td>两者都完成 12/12，但 Opus 的完成响应更及时。</td></tr>
+          <tr><td>服务门控 service gate</td><td class="num">.117857</td><td class="num">.089309</td><td>到场质量与完成质量相乘后，Opus 保留的运营分更多。</td></tr>
+        </tbody>
+      </table>
+      <p class="plain-note"><b>为什么不是 GPT 领先：</b>GPT 没有 invalid action，协议分更干净；但 Opus 的 response 高出 .045553、coverage 高出 .041565，服务门控也高出 .028548。由于到场占 40%、完成占 20%，这些业务时效优势超过了 Opus 的少量协议扣分，所以本条冻结批次的官方总分仍由 Opus 领先。</p>
+      <ul>
+        <li><b>先保护硬约束：</b>它在 P1 I004 上使用 ALS M554，没有拿不具备能力的车辆冒险。</li>
+        <li><b>能把释放事件变成下一步：</b>t=734 释放 M552 后派 I011；t=1299 AM122 完成 I002 后又派 I016，而不是把释放后的资源留在原地。</li>
+        <li><b>能恢复错误并继续：</b>遇到旧版本和重复编号后，最终用新编号 <code>d-003</code> 成功提交 I002，随后一直推进到 t=7200 再结束。</li>
+      </ul>
+      <p class="plain-note"><b>边界：</b>共同的场景瓶颈仍存在：I004 到场 515 秒、I013 到场 1,029 秒。换句话说，Opus 是这五条里最好的执行者，不是已经达到严格全通或理论最优。</p>
+    </div>
+    <div class="grid-2" style="margin-top:18px">
+      <div class="panel soft">
+        <h3>共同结构性压力</h3>
+        <p>四条完成轨迹都在 t=178 立即派出 ALS M554 处理 P1 I004，但到场均为 t=693，response=515 秒，略超 480 秒 SLA；I013 也都为 1029 秒。它们更像车队初始位置与场景动力学造成的共同瓶颈，不应简单归因于某一个模型。</p>
+      </div>
+      <div class="panel soft">
+        <h3>动态重规划仍是空白区</h3>
+        <p>本报告冻结的五条轨迹都没有实际使用 <code>reassign</code> 或 <code>reposition</code>。完成模型的 <code>adaptation_ungated</code>（未乘服务门控的动态适应参考值）仍可为 1，是因为它们没有错过已揭示的高优先级事件；这不等于模型已经证明了复杂重定位能力。后续变体应专门制造需要重规划的资源释放与区域变化。</p>
+      </div>
+    </div>
+    <div class="panel red" style="margin-top:18px">
+      <h3><span class="model-tag qwen"></span>Qwen 3.8 Max：局部决策合理，闭环执行失败</h3>
+        <p>Qwen 前 658 秒的派遣并非全部失效：它提交了 7 个合法 dispatch，也为需要 ALS 的 P1 I004 选择了 M554。问题出现在执行语义：模型输出中先写下“需要继续 advance 到 done=true”，随后又把自己对重复调用的担忧理解成停止信号，直接结束分析；环境并未拒绝最后一次 advance。</p>
+        <p>这使得 7 个已派事故全部停留在“在途（EN_ROUTE）”或“已到场但未完成（ON_SCENE）”，0 个 <code>service_complete</code>；剩余 5 个可调度事故尚未揭示，模型还看不到。由于没有继续 <code>advance</code>，它们也没有机会进入调度。verifier 因此给出 completion=0、coverage=0、service_gate=0，而不是因为非法操作或 replay 失败。</p>
+    </div>
+  </section>
+
+  <section class="page">
+    <div class="kicker muted">08 / Qwen 轨迹放大</div>
+    <h2>“派出”不等于“完成”：一个可复核的闭环失败</h2>
+    <div class="qwen-case">
+      <div class="panel dark">
+        <div class="kicker">终点状态</div>
+        <div class="big-number"><b>658</b><span>秒</span></div>
+        <div class="stat-row"><span>done</span><b>false</b></div>
+        <div class="stat-row"><span>finished</span><b>false</b></div>
+        <div class="stat-row"><span>dispatches</span><b>7</b></div>
+        <div class="stat-row"><span>服务完成事件（service_complete）</span><b>0</b></div>
+        <div class="stat-row"><span>P1/P2 未到场数</span><b>7</b></div>
+        <div class="stat-row"><span>integrity</span><b>1.000</b></div>
+      </div>
+      <div class="panel">
+        <h3>轨迹证据链</h3>
+        <ol>
+          <li>t=48 到 t=527：处理 I002、I003、I004、I005、I007、I008、I010，共 7 次 dispatch。</li>
+          <li>t=658：I003 和 I007 已到场，其他单位仍在 EN_ROUTE；没有任何事故完成服务。</li>
+          <li>公开终点状态显示：I003、I007 已到场，其他 5 辆车仍在途中；没有任何事故产生服务完成事件。</li>
+          <li>模型输出中也写明“还需推进到 done=true”，但随后把自己对重复调用的担忧当成停止信号，未再执行 advance，也没有 finish；最后一次 <code>advance</code> 实际返回 <code>ok=true</code>、<code>done=false</code>。</li>
+        </ol>
+        <div class="formula">completed weight = 0 / 8.25<br>response = 0.066065, coverage = 0<br>service_gate = response × coverage = 0<br>overall = 0.40 × 0.066065 + 0.05 × 1 = 0.076426</div>
+        <p class="small">这里的 0.05 是 integrity 权重：日志可重放只能保住证据链的残余分，不能替代事故服务。Qwen 的 7 次 dispatch 让 response 留下少量分，但没有任何 completion，所以 coverage 和三项被门控的运营分都是 0。</p>
+        <p class="small">这类失败特别有区分度：模型能做出若干正确的局部派遣，但无法把持久状态推进到业务完成。</p>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-top:18px">
+      <div class="panel soft"><h3>对模型能力的含义</h3><p>长轨迹可靠性不仅是记忆和规划，也包括遵守工具的终止语义。模型需要把“环境拒绝一次调用”和“回合已经结束”区分开。</p></div>
+      <div class="panel soft"><h3>对 benchmark 的含义</h3><p>如果只看 dispatch 数量或模型的文字总结，这条轨迹会被误判为“已经完成大半”。基于 completion 的 verifier 把这种表面进展正确压成低分。</p></div>
+    </div>
+    <h3 style="margin-top:22px">把结论对回原始日志：Qwen 与最高分 Opus</h3>
+    <p class="small">下面保留的是归档中的实际日志摘录，只做了换行和字段裁剪；时间、动作编号、状态版本和命令内容没有改写。Qwen 段落来自公开工具返回与模型自述；Opus 段落中的 <code>unit_release</code>/<code>service_complete</code> 行来自 verifier-side audit <code>event_log</code> 的事后证据，不是 Agent 当时看到的隐藏释放时延。末尾的英文句子是模型输出中的自我诊断摘录，不是 verifier 的判定依据；最终结论仍以 actions、checkpoint 和 details.json 为准。完整 JSONL 与思考轨迹随轨迹包提交。</p>
+    <div class="trace-compare">
+      <div class="trace-card qwen">
+        <h3><span><span class="model-tag qwen"></span>Qwen 3.8 Max</span><span class="pill warn">停在 t=658</span></h3>
+        <pre>{"action_id":"d-3","command":{"command":"dispatch","incident":"I004","unit":"M554","state_version":"7"},"sim_time":178.0,"state_version":8,"ok":true}
+...
+{"action_id":"auto-23","command":{"command":"advance","next_event":true},"sim_time":634.0,"state_version":23,"ok":true}
+{"action_id":"auto-24","command":{"command":"advance","next_event":true},"sim_time":658.0,"state_version":24,"ok":true,"events":[]}
+
+Need to keep advancing until done=true.
+The instruction is clear: "don't call it again."
+if I stop advancing, the episode won't complete.</pre>
+        <div class="log-facts" aria-label="Qwen 最后一次 advance 的日志字段">
+          <div><b>ok=true</b><span>这一次调用被环境接受，没有非法操作。</span></div>
+          <div><b>events=[]</b><span>这一步没有公开通知事件，不等于“没有未来事件”。</span></div>
+          <div><b>done=false</b><span>逻辑时钟和任务都没有到终点。</span></div>
+          <div><b>state_version=24</b><span>状态仍从 23 更新到 24，说明 advance 确实推进了。</span></div>
+        </div>
+        <p class="trace-caption"><b>发生了什么：</b>最后一次 advance 仍然改变了模拟时间和 state_version，且 7 辆车仍在途或已到场；模型输出中说出了正确的下一步，却把自己对重复调用的担忧误当成结束信号。随后没有 finish，也没有继续 advance。</p>
+      </div>
+      <div class="trace-card opus">
+        <h3><span><span class="model-tag opus"></span>Opus 5</span><span class="pill ok">完成 t=7200</span></h3>
+        <pre>{"action_id":"d-013","command":{"command":"dispatch","incident":"I016","unit":"AM122","state_version":"47"},"sim_time":1299.0,"state_version":48,"ok":true}
+...
+{"time_s":734.0,"kind":"unit_release","public":{"kind":"unit_available","unit_id":"M552"}}
+{"time_s":734.0,"kind":"dispatch","public":{"incident_id":"I011","unit_id":"M552"}}
+{"time_s":1299.0,"kind":"service_complete","public":{"incident_id":"I002","unit_id":"AM122"}}
+{"time_s":1299.0,"kind":"dispatch","public":{"incident_id":"I016","unit_id":"AM122"}}
+...
+{"action_id":"auto-73","command":{"command":"advance","next_event":true},"sim_time":7200.0,"state_version":71,"ok":true}
+{"action_id":"auto-74","command":{"command":"finish","reason":"all feasible work complete; horizon reached with all units available and all dispatchable incidents served"},"sim_time":7200.0,"state_version":72,"ok":true}
+
+Horizon reached at t=7200 — all dispatchable incidents served and completed, no further events. Finishing.</pre>
+        <div class="log-facts" aria-label="Opus 结束阶段的日志字段">
+          <div><b>auto-73 / t=7200</b><span>advance 后到达逻辑时间上限。</span></div>
+          <div><b>auto-74 / finish</b><span>确认没有剩余业务后才提交结束。</span></div>
+          <div><b>12 / 12 completed</b><span>所有可派事故都有服务完成事件。</span></div>
+          <div><b>integrity=1</b><span>两次独立重放的指纹一致。</span></div>
+        </div>
+        <p class="trace-caption"><b>为什么更好：</b>它把“服务完成”与“结束回合”分开处理：先持续 advance 到 horizon，确认所有单位 AVAILABLE、12/12 可派事故已完成，再调用 finish。它也保留 ALS 车辆给 P1 I004，并在后续资源释放后继续处理 I016。</p>
+      </div>
+    </div>
+    <div class="callout">
+      <strong>对比结论：</strong>Qwen 的问题不是不会写 dispatch，也不是日志不可信（integrity=1、replay 两次一致）；它在“局部派遣 → 推进事件 → 服务完成 → 释放资源 → 继续派遣 → done → finish”的最后闭环处停止。Opus 也有 3 条 invalid finding（旧 state_version 与重复/冲突 action ID），但它能读取拒绝、换用新编号继续推进，因此业务结果仍完整。这个差异正是本题要测的长轨迹工具可靠性。
+    </div>
+  </section>
+
+  <section class="page">
+    <div class="kicker muted">09 / 好 Bench 六项标准</div>
+    <h2>真实性、可信评分、区分度，和可持续使用的闭环</h2>
+    <p class="section-lead">下面按“证据、价值、当前边界”三层说明这个 benchmark 为什么值得投入，同时不把尚未完成的部分包装成已证明结论。</p>
+    <div class="table-scroll">
+    <table class="standards">
+      <thead><tr><th>标准</th><th>当前证据</th><th>为什么有价值</th><th>边界与下一步</th></tr></thead>
+      <tbody>
+        <tr><td>真实性</td><td>公开 SFFD/EMS CAD 数据；一个 20 分钟真实到达窗口，另用过去 7 天记录校准车队与时延；地址和坐标脱敏，travel、service、release、dispatch delay 保留非均匀时延。</td><td>模型面对的是有业务语义的资源调度，而不是抽象网格或固定距离题。</td><td>目前只覆盖 EMS 一个运营切片和一个时间窗，不代表完整消防系统或临床决策。</td></tr>
+        <tr><td>评分可信</td><td>独立 verifier 从轨迹重放重算；两次 state / trace hash 一致；Qwen integrity=1 但 completion=0。</td><td>把“工具调用合法”与“业务结果成功”分开，避免模型自报和表面动作刷分。</td><td>官方 Harbor 镜像端到端验收仍待补充；本报告分数由本地等价 verifier 产出，后续需持续维护版本和回放证据。</td></tr>
+        <tr><td>区分度</td><td>同一开局、最高思考档下 overall 从 .287464 到 .076426；四条全完成，仍由 SLA 迟到和 q² 拉开差距。</td><td>能区分策略质量、时效、协议纪律和闭环能力，而不是只判 pass / fail。</td><td>本报告每模型只纳入一条冻结批次运行；正式泛化需同版本至少 3 次并报告 CI。</td></tr>
+        <tr><td>过程与环境</td><td>唯一入口 <code>emsctl</code>；未来事故、释放时间、随机种子和内部状态不可见；状态版本、动作编号持久；可 reset、replay、审计。</td><td>构成真正的在线、部分可观测、事件驱动决策过程。</td><td>隐藏变体虽已设计，跨窗口 frontier 跑数仍需补齐。</td></tr>
+        <tr><td>用户与成本</td><td>每回合 24 到 75 次动作；清单记录工具调用、输入 token 和墙钟时间；自动批跑和轨迹归档。</td><td>后续可低人工成本地比较模型，并把质量和运行成本放在同一张证据表。</td><td>token 和墙钟时间是成本代理，不等于美元成本，也未替代真实调度员用户研究。</td></tr>
+        <tr><td>评测自身可信性</td><td>当前工作树本地测试套件 68 / 68 通过；冻结 manifest 的 release 记录为 62 / 62（0 failed）。两者都覆盖“同一动作重放仍一致、篡改会分叉、隐藏状态不会泄漏”等回归检查；场景和清单 hash 绑定。</td><td>benchmark 自己也接受回归测试，能给低分，也能解释低分来源。</td><td>当前只是一段窗口，未来可增加多窗口、多 surge、多区域、跨 session 和更多初始占用状态。</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="small scroll-note">窄屏查看时，可在表格区域左右滑动，以阅读四个标准的完整内容。</p>
+    <div class="callout" style="margin-top:18px">
+      <strong>难度余量与基线：</strong>这些是同一固定开局、同一独立 verifier 重算出的公开规则参照，不是模型分数：no-op（只观察、不派车）<code>overall=0.050000</code>；random-feasible（随机挑一辆合法车辆）<code>=0.198002</code>；rolling-horizon（只按当前已知窗口滚动规划）<code>=0.219143</code>；nearest-unit（同 battalion 粗区域优先、再按固定规则选可用车）和 priority-nearest（先按优先级、再用同一粗区域启发式）都为 <code>0.330338</code>，本窗口两者动作完全相同。这里的“nearest”不是 GPS 路网最近，而是公开粗区域上的可复现启发式；rolling-horizon 在这个固定窗口低于 nearest，只描述本场景和本次隐藏动力学，不能推出某种规则普遍优于另一种。模型比较的第一问是“是否超过某一条简单规则”，第二问才是“是否超过最强规则上限”；本批次没有模型超过 <code>0.330338</code>。<code>rolling-horizon ≥ 0.90</code> 是尚未验证的 provisional target（暂定目标），不能把它当作已经证明的难度门槛；当前结果只能说明简单策略还没有把这个窗口做满，未来仍可用更多窗口、资源竞争和跨回合状态检验饱和度。
+    </div>
+    <div class="term-strip"><b>标准表里的几个词：</b>deterministic replay（确定性重放）指同一动作序列再次运行仍得到同一结果；tamper divergence（篡改分叉）指改动日志后重放指纹应发生差异；hidden-state regression（隐藏状态回归）指测试模型是否能从异常路径读到本不该看到的信息；CI 是多次运行后的 95% 置信区间；surge 是事故集中到达的高峰，roster 是当班车队编组，cross-session 是跨多次连续对话仍需保持状态。</div>
+  </section>
+
+  <section class="page">
+    <div class="kicker muted">10 / 用户、成本与可复现性</div>
+    <h2>把“跑分”放回可使用的评测流程</h2>
+    <div class="grid-2">
+      <div class="panel">
+        <h3>可审计的运行成本代理</h3>
+        <table>
+          <thead><tr><th>模型</th><th class="num">机器实际耗时<br><span class="small">墙钟时间（wall clock）</span></th><th class="num">模型读入的文本单位数<br><span class="small">token；不是美元费用</span></th><th class="num">工具动作数</th></tr></thead>
+          <tbody>
+            <tr><td>GPT-5.6 Sol</td><td class="num">403 s</td><td class="num">4,795,935</td><td class="num">72</td></tr>
+            <tr><td>DeepSeek V4 Pro</td><td class="num">564 s</td><td class="num">5,732,245</td><td class="num">75</td></tr>
+            <tr><td>Kimi K3</td><td class="num">554 s</td><td class="num">5,210,228</td><td class="num">75</td></tr>
+            <tr><td>Qwen 3.8 Max</td><td class="num">186 s</td><td class="num">529,380</td><td class="num">24</td></tr>
+            <tr><td>Opus 5</td><td class="num">813 s*</td><td class="num">11,861,189*</td><td class="num">74</td></tr>
+          </tbody>
+        </table>
+        <p class="small" style="margin-top:10px">“机器实际耗时”是从启动到进程结束经过的秒数，不是 7,200 秒逻辑时间；“文本单位数”包含运行驱动（harness）读写上下文的 token，不能直接换算 API 账单；动作数包含 dispatch、advance、finish 等工具调用。* Opus 的耗时 / token 是从 pi-events 恢复的审计值，原始旧格式清单未写 usage。Qwen 的早停成本较低，但业务结果也最低，说明质量和成本必须一起看。</p>
+      </div>
+      <div class="panel">
+        <h3>一次可复现的交付链</h3>
+        <ol>
+          <li>固定任务版本、工具交互契约版本和独立评分器版本，并绑定初始场景指纹（scenario hash）。</li>
+          <li>每个模型使用独立运行文件夹（run directory），对模型只公开 <code>emsctl</code> 这一入口。</li>
+          <li>保存动作记录（actions）、事件记录（events）、状态指纹、关键状态快照（checkpoint）、提示词和运行驱动日志。</li>
+          <li>由评分器做两次独立轨迹重放（replay），输出官方分、解释性指标和错误证据。</li>
+          <li>报告、代码包和五条完整轨迹一起归档，便于现场展示和事后复核。</li>
+        </ol>
+      </div>
+    </div>
+    <div class="checklist" style="margin-top:18px">
+      <div class="check"><b>固定开局</b><br><span class="muted">同一初始状态和同一逻辑时钟，比较的是策略而不是随机遭遇。</span></div>
+      <div class="check"><b>持久规则</b><br><span class="muted">车辆忙闲、服务完成、版本和动作 ID 由环境维护，不靠模型记忆自报。</span></div>
+      <div class="check"><b>可复位</b><br><span class="muted">独立运行文件夹和隔离模拟器辅助进程支持 reset（重置）、replay（重放）与 tamper（篡改）检查。</span></div>
+      <div class="check warn"><b>待补证据</b><br><span class="muted">多次重复、隐藏窗口和官方 Harbor 镜像的端到端验收仍是下一阶段工作。</span></div>
+    </div>
+  </section>
+
+  <section class="page">
+    <div class="kicker muted">11 / 归档与结语</div>
+    <h2>这套评测要回答的核心问题</h2>
+    <div class="panel dark" style="margin-bottom:22px">
+      <p style="font-size:21px; line-height:1.45; margin:0; color:#fff">当模型看不见未来、资源有限、规则严格且每次操作都会留下持久状态时，它能否持续做出可执行的决策，并把整段运营回合可靠地推进到完成？</p>
+    </div>
+    <div class="grid-2">
+      <div class="panel">
+        <h3>当前最可信的结论</h3>
+        <ul>
+          <li>在这条冻结批次轨迹上，Opus 的策略质量和响应质量最高，但长轨迹协议纪律仍有可见瑕疵。</li>
+          <li>GPT 的工具协议和终止闭环最稳健之一，差距主要在调度时效。</li>
+          <li>DeepSeek 与 Kimi 都能完成 12 / 12，但迟到和资源等待使它们落入中间梯队。</li>
+          <li>Qwen 暴露出最清晰的终止语义失败：知道该继续，却没有继续执行。</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>下一步怎么提高难度</h3>
+        <ul>
+          <li>同一版本、同一最高思考档，每模型至少 3 次，报告均值、标准差和 95% CI。</li>
+          <li>跑完 10 个隐藏历史窗口，检查策略是否只适配当前一段事件顺序。</li>
+          <li>扩展到多时间窗、多 surge、多区域、不同 roster 和跨 session 连续任务。</li>
+          <li>增加真实调度员可用性、美元成本和用户研究，但保持 verifier 的可审计边界。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="rule"></div>
+    <h3>证据索引</h3>
+    <p class="small">
+      场景与设计：<code>tasks/sffd-rolling-surge-01/data_manifest.json</code>、
+      <code>tasks/sffd-rolling-surge-01/task.toml</code>、
+      <code>tasks/sffd-rolling-surge-01/environment/public_contract.json</code>；
+      评分实现：<code>tasks/sffd-rolling-surge-01/tests/verifier_lib.py</code>；
+      五条轨迹：见同目录下的 <code>results/pi-runs/</code>，轨迹包内附选择清单。
+    </p>
+    <div class="table-scroll">
+    <table class="archive-table">
+      <thead><tr><th>模型 / 思考档</th><th>冻结批次运行 ID</th><th>归档位置</th></tr></thead>
+      <tbody>
+        <tr><td>Opus 5 / max</td><td>20260822T215558Z-wodex-claude-opus-5-max-evaluation</td><td>trajectory archive / trajectories/</td></tr>
+        <tr><td>GPT-5.6 Sol / xhigh</td><td>20260823T001010Z-wodex-gpt-gpt-5.6-sol-xhigh-evaluation</td><td>trajectory archive / trajectories/</td></tr>
+        <tr><td>DeepSeek V4 Pro / max</td><td>20260823T001922Z-deepseek-deepseek-v4-pro-max-evaluation</td><td>trajectory archive / trajectories/</td></tr>
+        <tr><td>Kimi K3 / max</td><td>20260823T001922Z-moonshot-kimi-k3-max-evaluation</td><td>trajectory archive / trajectories/</td></tr>
+        <tr><td>Qwen 3.8 Max / max</td><td>20260823T001922Z-dashscope-qwen3.8-max-max-evaluation</td><td>trajectory archive / trajectories/</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="small scroll-note">窄屏查看时，可在表格区域左右滑动，以阅读完整运行 ID 和归档位置。</p>
+    <div class="callout" style="margin-top:14px">
+      <strong>本次交付文件：</strong>
+      <a href="sffd-rolling-surge-code-v1.1.0.tar.gz">代码快照压缩包</a>；
+      <a href="sffd-rolling-surge-v1.1.0-trajectories.tar.gz">五条冻结轨迹压缩包</a>。
+      两个文件都放在本 HTML 的同一目录，轨迹包内附选择清单。
+    </div>
+    <p class="small">报告生成时间：2026-08-23（Asia/Shanghai）。本报告不把模型文字总结当作事实来源；行为结论均以 actions、event_log、checkpoint 和 verifier/details 为准。</p>
+  </section>
+
+  <footer class="footer">
+    SFFD Rolling Surge 01 / abench / task 1.1.0 / verifier sffd-harbor-verifier-0.2
+    <span style="float:right">离线 HTML，可直接打印为 PDF</span>
+  </footer>
+</main>
+</body>
+</html>

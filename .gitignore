@@ -18,3 +18,8 @@ hidden_variants_manifest.json
 results/pi-runs/
 # pi-setup 安装目录时的备份
 *.bak.*
+
+# Project-local third-party Codex skill
+.agents/skills/archify/
+
+*.tar.gz
